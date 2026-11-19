@@ -7,6 +7,7 @@ const Voice = (() => {
   let wantStop = false;
   let buffer = '';
   let idleTimer = null;
+  let sessTimer = null;
   let onResult = null;
   let onState = null;
 
@@ -24,6 +25,22 @@ const Voice = (() => {
     return true;
   }
 
+  function appendFinal(chunk) {
+    chunk = (chunk || '').trim();
+    if (!chunk) return;
+    const tail = buffer.trim();
+    if (tail.endsWith(chunk)) return;
+    const tw = tail.split(' ').filter(Boolean);
+    const cw = chunk.split(' ').filter(Boolean);
+    const maxK = Math.min(tw.length, cw.length, 8);
+    let overlap = 0;
+    for (let k = maxK; k > 0; k--) {
+      if (tw.slice(-k).join(' ') === cw.slice(0, k).join(' ')) { overlap = k; break; }
+    }
+    const add = overlap ? cw.slice(overlap).join(' ') : chunk;
+    if (tail.length + add.length < 400) buffer += add + ' ';
+  }
+
   function startSR() {
     if (rec) { try { rec.abort(); } catch (e) {} }
     rec = new SR();
@@ -36,7 +53,7 @@ const Voice = (() => {
       let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) buffer += r[0].transcript + ' ';
+        if (r.isFinal) appendFinal(r[0].transcript);
         else interim += r[0].transcript;
       }
       onResult((buffer + interim).trim(), false);
@@ -61,16 +78,19 @@ const Voice = (() => {
     onState('listening');
     try { rec.start(); } catch (e) { /* уже запущен */ }
     armIdle();
+    clearTimeout(sessTimer);
+    sessTimer = setTimeout(() => stop(), 30000);
   }
 
   function armIdle() {
     clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => stop(), 12000);
+    idleTimer = setTimeout(() => stop(), 4000);
   }
 
   function stop() {
     wantStop = true;
     clearTimeout(idleTimer);
+    clearTimeout(sessTimer);
     if (rec) { try { rec.stop(); } catch (e) { try { rec.abort(); } catch (e2) {} } }
     active = false;
     onState('idle');
@@ -118,11 +138,13 @@ const Voice = (() => {
     active = true;
     onState('recording');
     mediaRec.start();
-    armIdle();
+    clearTimeout(sessTimer);
+    sessTimer = setTimeout(() => voxStop(), 45000);
     return true;
   }
 
   function voxStop() {
+    clearTimeout(sessTimer);
     if (mediaRec && mediaRec.state !== 'inactive') mediaRec.stop();
   }
 

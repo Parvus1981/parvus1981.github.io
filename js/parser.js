@@ -74,7 +74,8 @@ function parseChunk(chunk) {
     const mass = t.match(new RegExp(`\\d[.,]?\\d*\\s*(?:${UNIT_WORDS})(?=[\\p{L}]*[\\s.,]|$)`, 'iu'));
     if (mass && parseNum(mass[0]) < 3000) qtyText = mass[0];
   }
-  const price = nums.length ? parseNum(nums[nums.length - 1][0]) : 0;
+  let price = nums.length ? parseNum(nums[nums.length - 1][0]) : 0;
+  if (!(price > 0) || price > 9999) price = 0;
   const name = ((qtyText ? t.replace(new RegExp(qtyText.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\p{L}*', 'u'), ' ') : t)
     .replace(new RegExp(NUM_RE.source, 'g'), ' ')
     .replace(/(?:€|eur|грн|₴|₽|chf|руб|лт)/gi, ' ')

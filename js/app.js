@@ -146,7 +146,7 @@
       },
       st => {
         btn.classList.toggle('listening', st === 'listening' || st === 'recording');
-        if (st === 'listening') line.textContent = '🎙️ Слушаю… (тишина 12 сек — стоп)';
+        if (st === 'listening') line.textContent = '🎙️ Слушаю… (тишина 4 сек — стоп)';
         else if (st === 'recording') line.textContent = '🔴 Запись… нажмите кнопку снова для расшифровки';
         else if (st === 'idle') {
           btn.classList.remove('listening');
@@ -376,10 +376,18 @@
   }
 
   function makeDraft(items) {
-    state.draft = items.map(it => ({
-      id: uid(), name: it.name || 'Позиция', qty: Number(it.qty) || 1,
-      price: Number(it.price) || 0, cat: it.cat || guessCat(it.name)
-    })).filter(it => (it.name.length > 1 || it.price > 0));
+    state.draft = [];
+    for (const raw of items) {
+      const it = {
+        id: uid(), name: raw.name || 'Позиция', qty: Math.min(Number(raw.qty) || 1, 99),
+        price: Math.min(Number(raw.price) || 0, 9999), cat: raw.cat || guessCat(raw.name)
+      };
+      if (!(it.name.length > 1 || it.price > 0)) continue;
+      const key = it.name.trim().toLowerCase() + '|' + it.price.toFixed(2);
+      const same = state.draft.find(d => d.name.trim().toLowerCase() + '|' + d.price.toFixed(2) === key);
+      if (same && same.price > 0 && state.source !== 'manual') same.qty += it.qty;
+      else state.draft.push(it);
+    }
     $('draftDate').value = todayISO();
     renderDraft();
     $('draftArea').hidden = false;
