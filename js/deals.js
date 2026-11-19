@@ -90,7 +90,7 @@ const Deals = (() => {
   function hit(hay, t) {
     return hay.split(' ').some(w => {
       if (w === t) return true;
-      if (w.startsWith(t) && w.length - t.length <= 6) return true;
+      if (w.startsWith(t) && w.length - t.length <= 4) return true;
       return t.length >= 6 && w.includes(t);
     });
   }
