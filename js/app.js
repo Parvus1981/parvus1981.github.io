@@ -399,8 +399,10 @@
     for (const line of lines) {
       const it = parseChunk(line.replace(/\s{3,}/g, ' ').replace(/^[xX*]\s*/, ''));
       if (!it) continue;
+      const words = (it.name || '').split(/[^\p{L}]+/u).filter(Boolean);
+      const longest = Math.max(0, ...words.map(w => w.length));
       const letters = (it.name || '').replace(/[^\p{L}]/gu, '');
-      const nameOk = letters.length >= 3 && !(it.name === it.name.toUpperCase() && letters.length <= 6);
+      const nameOk = longest >= 3 && letters.length >= 3 && !(it.name === it.name.toUpperCase() && letters.length <= 6);
       const priceOk = it.price > 0 && (/\d[.,]\d{1,2}(\s|$)/.test(line) || it.price >= 20) && it.price <= 500;
       if (nameOk && priceOk) items.push(it);
     }
@@ -468,6 +470,7 @@
   $('btnSaveDraft').addEventListener('click', () => {
     if (!state.draft.length) return toast('Нечего сохранять');
     const total = state.draft.reduce((s, it) => s + it.qty * it.price, 0);
+    if (total > 500 && !confirm(`Сумма чека ${total.toFixed(2)} € — это правда так? Проверьте позиции.`)) return;
     Storage.addTx({
       id: uid(), date: $('draftDate').value || todayISO(), cat: $('draftCat').value,
       items: state.draft.map(({ name, qty, price, cat }) => ({ name, qty, price, cat })),
@@ -533,6 +536,14 @@
     $('txMonthSum').textContent = txs.length ? `${sum.toFixed(2)}${CUR()}` : '';
   }
   $('filterCat').addEventListener('change', e => { state.filterCat = e.target.value; renderTx(); });
+  $('btnClearMonth').addEventListener('click', () => {
+    if (!confirm('Удалить ВСЕ операции за этот месяц? Восстановить нельзя.')) return;
+    Storage.data.txs = Storage.data.txs.filter(t => Storage.monthKey(t.date) !== state.month);
+    Storage.save();
+    renderTx();
+    renderMonthLabel();
+    toast('Месяц очищен');
+  });
 
   /* Бюджет */
   function renderBudget() {
