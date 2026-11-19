@@ -53,7 +53,8 @@
   function renderMonthLabel() {
     $('monthLabel').textContent = monthLabel();
     $('budgetMonth').textContent = monthLabel();
-    $('headerSub').textContent = `${Storage.settings().zip || ''} · ${CUR()}`;
+    const monthSpend = Storage.txsForMonth(state.month).reduce((s, t) => s + (t.total || 0), 0);
+    $('headerSub').textContent = `${Storage.settings().city || Storage.settings().zip || ''} · потрачено ${fmt(monthSpend)}`;
     $('dealZip').textContent = Storage.settings().zip || '';
   }
   $('prevMonth').addEventListener('click', () => shiftMonth(-1));
@@ -126,16 +127,22 @@
   }
 
   /* Голос корзины */
+  let basketAdded = 0;
   $('btnBasketVoice').addEventListener('click', () => {
     const btn = $('btnBasketVoice');
     const line = $('basketVoiceLine');
     if (Voice.active) { Voice.stop(); return; }
+    basketAdded = 0;
     Voice.start(
       (text, isFinal) => {
         if (!text) return;
         line.textContent = '🛒 услышал: ' + text;
         line.classList.add('live');
-        if (isFinal) addBasketFromText(text);
+        if (isFinal) {
+          const rest = text.slice(basketAdded).trim();
+          basketAdded = text.length;
+          if (rest) addBasketFromText(rest);
+        }
       },
       st => {
         btn.classList.toggle('listening', st === 'listening' || st === 'recording');

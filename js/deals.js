@@ -91,14 +91,21 @@ const Deals = (() => {
   }
 
   function score(offer, itemToks, qWords) {
-    const hay = norm([offer.n, offer.b, offer.d].filter(Boolean).join(' '));
+    const n = norm(offer.n || '');
+    const b = norm(offer.b || '');
+    const d = norm(offer.d || '');
     let score = 0;
     for (const w of qWords) {
-      const wt = tokens(w);
-      if (wt.some(t => hit(hay, t))) score += 2;
+      for (const t of tokens(w)) {
+        if (n && hit(n, t)) score += 4;
+        else if (b && hit(b, t)) score += 2;
+        else if (d && hit(d, t)) score += 0.5;
+      }
     }
-    const matched = itemToks.filter(t => hit(hay, t)).length;
-    score += matched;
+    for (const t of itemToks) {
+      if (n && hit(n, t)) score += 2;
+      else if (b && hit(b, t)) score += 1;
+    }
     return score;
   }
 

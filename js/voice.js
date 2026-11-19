@@ -39,7 +39,7 @@ const Voice = (() => {
         if (r.isFinal) buffer += r[0].transcript + ' ';
         else interim += r[0].transcript;
       }
-      onResult((buffer + interim).trim(), buffer.length > 0);
+      onResult((buffer + interim).trim(), false);
       armIdle();
     };
     rec.onerror = e => {
