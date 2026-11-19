@@ -35,6 +35,7 @@ const Deals = (() => {
     'салат': 'salat', 'брокколи': 'brokkoli', 'шпинат': 'spinat', 'грибы': 'champignons',
     'авокадо': 'avocado', 'чеснок': 'knoblauch',
     'фарш': 'hackfleisch', 'курица': 'hähnchen', 'индейка': 'putenbrust', 'свинина': 'schweinefilet',
+    'колбаса': 'wurst salami fleischwurst', 'колбаса вареная': 'fleischwurst', 'сосиски': 'wiener würstchen',
     'говядина': 'rindergulasch', 'колбаски': 'bratwurst würstchen', 'сардельки': 'würstchen',
     'ветчина': 'schinken', 'салями': 'salami', 'рыба': 'fisch', 'лосось': 'lachs',
     'тунец': 'thunfisch', 'креветки': 'garnelen shrimps',
@@ -87,7 +88,11 @@ const Deals = (() => {
   }
 
   function hit(hay, t) {
-    return hay.split(' ').some(w => w === t || w.startsWith(t) || (t.length >= 5 && w.includes(t)));
+    return hay.split(' ').some(w => {
+      if (w === t) return true;
+      if (w.startsWith(t) && w.length - t.length <= 6) return true;
+      return t.length >= 6 && w.includes(t);
+    });
   }
 
   function score(offer, itemToks, qWords) {

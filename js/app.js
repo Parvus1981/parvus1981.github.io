@@ -763,6 +763,13 @@
   /* PWA */
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(console.warn));
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      try {
+        if (sessionStorage.getItem('swBooted')) return;
+        sessionStorage.setItem('swBooted', '1');
+        location.reload();
+      } catch (e) { location.reload(); }
+    });
   }
   let deferredPrompt = null;
   window.addEventListener('beforeinstallprompt', e => {
