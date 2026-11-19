@@ -1,4 +1,4 @@
-/* Главный модуль приложения */
+/* Семейный бухгалтер v2: корзина → сравнение акций рядом; учёт; бюджет; цели; AI */
 (() => {
   const $ = id => document.getElementById(id);
   const CUR = () => Storage.settings().currency;
@@ -6,15 +6,17 @@
   const todayISO = () => new Date().toISOString().slice(0, 10);
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
-  let state = {
+  const state = {
     month: new Date().toISOString().slice(0, 7),
     draft: [],
+    source: 'manual',
+    filterCat: '',
+    compare: null,
     donut: null,
-    bar: null,
-    filterCat: ''
+    bar: null
   };
 
-  function toast(msg, ms = 2200) {
+  function toast(msg, ms = 2400) {
     const t = $('toast');
     t.textContent = msg;
     t.hidden = false;
@@ -22,136 +24,256 @@
     toast._t = setTimeout(() => { t.hidden = true; }, ms);
   }
 
-  /* ---------- Навигация ---------- */
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, ch => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+  }
+
+  /* ============ Tabs / месяц ============ */
   document.querySelectorAll('.tab').forEach(btn => {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
   function switchTab(name) {
     document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
     document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === `screen-${name}`));
-    if (name === 'tx') renderTx();
-    if (name === 'budget') renderBudget();
+    if (name === 'money') renderTx();
+    if (name === 'budget') { renderBudget(); renderGoals(); }
     if (name === 'overview') renderOverview();
-    if (name === 'deals') renderMarkets();
-    if (name === 'settings') loadSettingsUI();
+    if (name === 'deals') openDeals();
+    if (name === 'settings') { loadSettingsUI(); renderStoreEdit(); }
+    if (name === 'shop') renderBasket();
     window.scrollTo(0, 0);
   }
 
+  function monthLabel() {
+    const [y, m] = state.month.split('-').map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+  }
+  function renderMonthLabel() {
+    $('monthLabel').textContent = monthLabel();
+    $('budgetMonth').textContent = monthLabel();
+    $('headerSub').textContent = `${Storage.settings().zip || ''} · ${CUR()}`;
+    $('dealZip').textContent = Storage.settings().zip || '';
+  }
   $('prevMonth').addEventListener('click', () => shiftMonth(-1));
   $('nextMonth').addEventListener('click', () => shiftMonth(1));
   function shiftMonth(d) {
     const [y, m] = state.month.split('-').map(Number);
     const dt = new Date(y, m - 1 + d, 1);
     state.month = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
-    renderMonthLabel(); renderTx();
-  }
-  function renderMonthLabel() {
-    const [y, m] = state.month.split('-').map(Number);
-    $('monthLabel').textContent = new Date(y, m - 1, 1)
-      .toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
-    $('budgetMonth').textContent = `(${state.month})`;
+    renderMonthLabel();
+    if ($('screen-money').classList.contains('active')) renderTx();
   }
 
-  /* ---------- Голосовой ввод ---------- */
-  let recog = null;
-  $('btnVoice').addEventListener('click', () => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { toast('Голос не поддерживается этим браузером — используйте Chrome'); manualToggle(true); return; }
-    if (recog) { recog.stop(); return; }
-    recog = new SR();
-    recog.lang = Storage.settings().voiceLang || 'de-DE';
-    recog.continuous = true;
-    recog.interimResults = false;
-    let collected = '';
-    recog.onresult = e => {
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) collected += ' ' + e.results[i][0].transcript;
-      }
-      $('voiceStatus').querySelector('span:last-child')?.remove();
-      $('voiceStatus').innerHTML = `<span class="pulse">🎙️</span> ${collected.trim() || 'Говорите…'}`;
-    };
-    recog.onend = () => {
-      $('voiceStatus').hidden = true;
-      recog = null;
-      if (collected.trim()) {
-        manualToggle(true);
-        $('manualInput').value = ($('manualInput').value + ' ' + collected).trim();
-        makeDraft(parseItemsText(collected));
-        toast('Голос распознан ✓');
-      }
-    };
-    recog.onerror = e => { toast('Ошибка распознавания: ' + e.error); $('voiceStatus').hidden = true; recog = null; };
-    $('voiceStatus').hidden = false;
-    recog.start();
-  });
-
-  /* ---------- Ручной ввод / парсинг ---------- */
-  $('btnManual').addEventListener('click', () => manualToggle());
-  function manualToggle(force) {
-    const a = $('manualArea');
-    a.hidden = force === true ? false : !a.hidden;
-    if (!a.hidden) $('manualInput').focus();
-  }
-  $('btnParseText').addEventListener('click', () => {
-    const items = parseItemsText($('manualInput').value);
-    if (!items.length) return toast('Не нашёл позиции — напишите в формате: молоко 1.29');
-    makeDraft(items);
-  });
-
-  /* ---------- OCR чека ---------- */
-  $('photoInput').addEventListener('change', async e => {
-    const file = e.target.files[0];
-    if (!file) return;
-    e.target.value = '';
-    const url = URL.createObjectURL(file);
-    const prev = $('receiptPreview');
-    prev.src = url; prev.hidden = false;
-    $('ocrProgress').hidden = false;
-    if (typeof Tesseract === 'undefined') {
-      $('ocrProgress').hidden = true;
-      return toast('OCR-библиотека ещё не загрузилась, попробуйте снова');
-    }
-    try {
-      const langs = Storage.settings().ocrLang || 'deu+rus+eng';
-      const res = await Tesseract.recognize(file, langs, {
-        logger: m => { if (m.status === 'recognizing text' && m.progress) $('ocrStatus').textContent = `${Math.round(m.progress * 100)}%`; }
+  /* ============ Корзина (главная) ============ */
+  function renderBasket() {
+    const basket = Storage.basket();
+    const wrap = $('basketList');
+    wrap.innerHTML = '';
+    $('basketCard').hidden = basket.length === 0;
+    $('basketCount').textContent = basket.length ? `· ${basket.length}` : '';
+    basket.forEach(b => {
+      const row = document.createElement('div');
+      row.className = 'b-item' + (b.done ? ' done' : '');
+      row.innerHTML = `
+        <input type="checkbox" ${b.done ? 'checked' : ''} title="куплено">
+        <span class="b-name">${esc(b.name)}</span>
+        <input type="number" min="1" step="any" value="${b.qty}" title="кол-во">
+        <button class="del" title="убрать">✕</button>`;
+      row.querySelector('input[type=checkbox]').addEventListener('change', e => {
+        Storage.updateBasket(b.id, { done: e.target.checked });
+        renderBasket();
       });
-      const text = res.data.text || '';
-      await ingestReceipt(text);
-    } catch (err) {
-      console.error(err);
-      toast('Не удалось распознать чек');
-    } finally {
-      $('ocrProgress').hidden = true;
-      $('ocrStatus').textContent = '';
+      row.querySelector('input[type=number]').addEventListener('change', e => {
+        Storage.updateBasket(b.id, { qty: Math.max(1, Number(e.target.value) || 1) });
+      });
+      row.querySelector('.del').addEventListener('click', () => { Storage.delFromBasket(b.id); renderBasket(); });
+      wrap.appendChild(row);
+    });
+  }
+
+  function addBasketFromText(text) {
+    let added = 0;
+    for (const it of parseItemsText(text)) {
+      const name = (it.name || '').replace(/^(?:купить|купи|хочу|нужно|надо|kaufen?)\s+/i, '').trim();
+      if (name.length < 2) continue;
+      Storage.addToBasket({ name, qty: it.qty || 1 });
+      added++;
     }
+    if (!added) toast('Не понял товар — скажите или впишите');
+    else toast(`🛒 +${added} в корзину`);
+    renderBasket();
+  }
+
+  $('btnBasketAdd').addEventListener('click', () => {
+    const v = $('basketInput').value.trim();
+    if (!v) return;
+    $('basketInput').value = '';
+    addBasketFromText(v);
+  });
+  $('basketInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('btnBasketAdd').click(); });
+  $('btnBasketClear').addEventListener('click', () => {
+    Storage.clearCheckedBasket();
+    renderBasket();
+    toast('Отмеченные убраны из корзины');
   });
 
-  async function ingestReceipt(text) {
-    if (!text.trim()) return toast('Текст чека пуст — сфотографируйте ближе и чётче');
-    if (Storage.settings().aiKey) {
-      try {
-        toast('🤖 AI разбирает чек…', 4000);
-        const items = await AI.parseReceipt(text, CUR());
-        if (items.length) { makeDraft(items); return; }
-      } catch (err) { AI.showErr($('toast') ?? {}, err); console.warn(err); }
-    }
-    const lines = text.split('\n')
-      .map(l => l.trim())
-      .filter(l => l && !/summe|total|итог|bar|karte|change|wec?hselgeld|zwischensumme|mwst|ust|vat|edv|ungef/i.test(l));
-    const items = [];
-    for (const line of lines) {
-      const it = parseChunk(line.replace(/\s{3,}/g, ' ').replace(/^[xX*]\s*/, ''));
-      if (it && it.price > 0 && it.name.length > 1) items.push(it);
-    }
-    if (!items.length) return toast('Позиции не найдены — добавьте AI-ключ или введите вручную');
-    makeDraft(items);
+  function showVoiceHint(html) {
+    const h = $('voiceHint');
+    h.innerHTML = html;
+    h.hidden = false;
   }
 
-  /* ---------- Черновик ---------- */
-  function fillCatSelect(sel, chosen) {
-    sel.innerHTML = CATS.map(c => `<option value="${c.id}" ${c.id === chosen ? 'selected' : ''}>${c.name}</option>`).join('');
+  /* Голос корзины */
+  $('btnBasketVoice').addEventListener('click', () => {
+    const btn = $('btnBasketVoice');
+    const line = $('basketVoiceLine');
+    if (Voice.active) { Voice.stop(); return; }
+    Voice.start(
+      (text, isFinal) => {
+        if (!text) return;
+        line.textContent = '🛒 услышал: ' + text;
+        line.classList.add('live');
+        if (isFinal) addBasketFromText(text);
+      },
+      st => {
+        btn.classList.toggle('listening', st === 'listening' || st === 'recording');
+        if (st === 'listening') line.textContent = '🎙️ Слушаю… (тишина 12 сек — стоп)';
+        else if (st === 'recording') line.textContent = '🔴 Запись… нажмите кнопку снова для расшифровки';
+        else if (st === 'idle') {
+          btn.classList.remove('listening');
+          line.classList.remove('live');
+          line.textContent = 'Нажми и говори: «молоко, хлеб, 6 яиц…»';
+        }
+        else if (st === 'denied') { showVoiceHint('⚠️ Микрофон запрещён. Разрешите доступ: значок 🔒 слева от адреса → Микрофон → Разрешить → перезагрузите.'); toast('Микрофон запрещён'); }
+        else if (st === 'unsupported') { showVoiceHint('ℹ️ Здесь нет живого распознавания. Либо откройте в Chrome, либо добавьте бесплатный AI-ключ («Ещё») — тогда микрофон запишет аудио и AI расшифрует.'); }
+        else if (st === 'network') toast('Нет связи с распознаванием — проверьте интернет');
+        else if (st === 'empty') toast('Речь не разобрана, попробуйте снова');
+      }
+    );
+  });
+
+  /* ============ Сравнение цен ============ */
+  $('btnCompare').addEventListener('click', async () => {
+    const out = $('compareOut');
+    const basket = Storage.basket().filter(b => !b.done);
+    if (!basket.length) return toast('Корзина пуста');
+    out.innerHTML = '';
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<div class="cmp-found">🤖 Сверяю ${basket.length} позици${basket.length === 1 ? 'ю' : 'и'} ${basket.length < 5 ? '' : ''}с акциями рядом…</div>`;
+    out.appendChild(card);
+    let data;
+    try { data = await Deals.load(); }
+    catch (e) {
+      card.querySelector('.cmp-found').textContent = '⚠️ Не удалось загрузить акции: ' + e.message;
+      return;
+    }
+    const offers = data.offers || [];
+    state.compare = { data, basket };
+
+    let html = '';
+    let found = 0;
+    const missed = [];
+    for (const item of basket) {
+      const offs = Deals.findFor(item.name, offers, 4);
+      if (!offs.length) { missed.push(item.name); continue; }
+      found++;
+      const best = offs[0];
+      html += `<div class="cmp-item">
+        <div class="cmp-head"><span class="cmp-name">${esc(item.name)}${item.qty > 1 ? ` ×${item.qty}` : ''}</span>
+        <span class="cmp-best">от ${fmt(best.p)}${best.u ? ' /' + esc(best.u) : ''}</span></div>`;
+      offs.slice(0, 3).forEach(o => {
+        const st = Storage.storeByKey(o.s[0]?.u);
+        const dist = st && st.dist != null && st.dist !== '' ? `<span class="o-dist">🚗 ${st.dist} км</span>` : '';
+        const d = Deals.discountPct(o);
+        html += `<a class="offer-row" ${o.e ? `href="${esc(o.e)}" target="_blank" rel="noopener"` : ''}>
+          <img src="${esc(o.img)}" loading="lazy" alt="">
+          <div class="o-main">
+            <div class="o-title">${esc(o.n)}${o.b ? ` · ${esc(o.b)}` : ''}</div>
+            <div class="o-meta"><b>${esc(o.s[0]?.n || '')}</b> ${dist} · до ${esc((o.t || '').slice(5, 10))}</div>
+          </div>
+          <div>${d ? `<span class="o-tag" style="background:${d >= 30 ? '#e5484d' : '#f5a623'}">−${d}%</span>` : ''}
+          <span class="o-price">${fmt(o.p)}</span>${o.op ? `<span class="o-old">${fmt(o.op)}</span>` : ''}</div>
+        </a>`;
+      });
+      html += '</div>';
+    }
+
+    const activeCount = basket.length;
+    const totals = [...Deals.bestByStore(basket, offers).values()]
+      .map(t => {
+        const st = Storage.storeByKey(t.key);
+        t.dist = st && st.dist != null && st.dist !== '' ? Number(st.dist) : null;
+        return t;
+      })
+      .sort((a, b) => b.covers - a.covers || a.sum - b.sum);
+    const coversMax = totals.length ? totals[0].covers : 0;
+    const ranked = totals
+      .filter(t => t.covers >= coversMax)
+      .sort((a, b) => (a.sum + 0.3 * (a.dist || 0)) - (b.sum + 0.3 * (b.dist || 0)));
+
+    let totHtml = '';
+    if (totals.length) {
+      const bestKey = ranked[0] && ranked[0].key;
+      totHtml = '<div class="card-head" style="margin-top:14px"><h2>Во сколько обойдётся корзина</h2></div>';
+      totals.slice(0, 6).forEach(t => {
+        totHtml += `<div class="store-tot ${t.key === bestKey ? 'best' : ''}">
+          <div><span class="st-name">${esc(t.store)}</span>${t.dist != null ? `<span class="st-dist">${t.dist} км от вас</span>` : ''}</div>
+          <div style="text-align:right"><span class="st-sum">${fmt(t.sum)}</span>
+          <span class="st-sub">${t.covers}/${activeCount} товаров</span></div>
+        </div>`;
+      });
+      if (ranked[0]) {
+        totHtml += `<div class="cmp-found" style="margin-top:10px">💡 Выгоднее всего сегодня: <b>${esc(ranked[0].store)}</b>${ranked[0].dist != null ? ` (${ranked[0].dist} км)` : ''} — ${fmt(ranked[0].sum)} за ${ranked[0].covers} из ${activeCount} позиций.</div>`;
+      }
+      totHtml += `<div class="cmp-actions">
+        <button id="btnToBudget" class="btn primary">✔️ Куплено — внести в бюджет</button>
+      </div>`;
+    }
+
+    card.innerHTML = `
+      <div class="cmp-found">Найдено в акциях: <b>${found}</b> из ${basket.length}${missed.length ? ` · нет акций на: ${esc(missed.join(', '))}` : ''}${data.updated ? ` · данные от ${new Date(data.updated).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}</div>
+      ${html}${totHtml}`;
+
+    const tb = $('btnToBudget');
+    if (tb) tb.addEventListener('click', basketToBudget);
+  });
+
+  function basketToBudget() {
+    const basket = Storage.basket();
+    const doneItems = basket.filter(b => b.done);
+    const active = basket.filter(b => !b.done);
+    if (!active.length && !doneItems.length) return;
+    const txItems = [];
+    let total = 0;
+    for (const b of active.concat(doneItems)) {
+      let price = 0;
+      if (state.compare) {
+        const offs = Deals.findFor(b.name, state.compare.data.offers, 1);
+        if (offs.length) price = offs[0].p;
+      }
+      total += price * (b.qty || 1);
+      txItems.push({ name: b.name, qty: b.qty || 1, price, cat: guessCat(b.name) });
+    }
+    Storage.addTx({
+      id: uid(),
+      date: todayISO(),
+      cat: txItems[0].cat,
+      items: txItems,
+      total,
+      note: '🛒 из корзины',
+      source: 'basket'
+    });
+    Storage.basket().slice().forEach(b => Storage.delFromBasket(b.id));
+    state.compare = null;
+    $('compareOut').innerHTML = '';
+    renderBasket();
+    toast(`💸 Внесено в бюджет: ${txItems.length} позиц. на ${fmt(total)}`);
   }
+
+  /* ============ Учёт: голос/фото/ручной + список ============ */
   CATS.forEach(c => {
     const opt = document.createElement('option');
     opt.value = c.id; opt.textContent = c.name;
@@ -159,11 +281,98 @@
     $('draftCat').appendChild(opt.cloneNode(true));
   });
 
+  $('btnVoice').addEventListener('click', () => {
+    const vs = $('voiceStatus');
+    const vt = $('voiceText');
+    if (Voice.active) { state.source = 'voice'; Voice.stop(); return; }
+    state.source = 'voice';
+    Voice.start(
+      (text, isFinal) => {
+        if (text) { vs.hidden = false; vt.textContent = text; }
+        if (isFinal && text) {
+          manualToggle(true);
+          $('manualInput').value = text;
+          makeDraft(parseItemsText(text));
+        }
+      },
+      st => {
+        if (st === 'listening') { vs.hidden = false; vt.textContent = 'Говорите… формат: «товар цена». Например: «молоко полтора евро»'; }
+        else if (st === 'recording') { vs.hidden = false; vt.textContent = '🔴 Запись… нажмите ещё раз'; }
+        else if (st === 'idle') {
+          vs.hidden = true;
+          vt.textContent = '';
+        }
+        else if (st === 'denied') { showVoiceHint('⚠️ Микрофон запрещён: 🔒 слева от адреса → Микрофон → Разрешить.'); toast('Микрофон запрещён'); }
+        else if (st === 'unsupported') showVoiceHint('ℹ️ Нет живого распознавания в этом браузере. Откройте в Chrome или добавьте AI-ключ — тогда запишем аудио и расшифруем.');
+        else if (st === 'network') toast('Нет связи с распознаванием');
+      }
+    );
+  });
+
+  $('btnManual').addEventListener('click', () => { state.source = 'manual'; manualToggle(); });
+  function manualToggle(force) {
+    const a = $('manualArea');
+    a.hidden = force === true ? false : !a.hidden;
+    if (!a.hidden) $('manualInput').focus();
+  }
+  $('btnParseText').addEventListener('click', () => {
+    const items = parseItemsText($('manualInput').value);
+    if (!items.length) return toast('Не нашёл позиции — формат: молоко 1.29');
+    makeDraft(items);
+  });
+
+  /* OCR */
+  $('photoInput').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+    state.source = 'photo';
+    $('receiptPreview').src = URL.createObjectURL(file);
+    $('receiptPreview').hidden = false;
+    $('ocrProgress').hidden = false;
+    if (typeof Tesseract === 'undefined') {
+      $('ocrProgress').hidden = true;
+      return toast('OCR ещё грузится, попробуйте снова');
+    }
+    try {
+      const res = await Tesseract.recognize(file, Storage.settings().ocrLang, {
+        logger: m => { if (m.status === 'recognizing text' && m.progress) $('ocrStatus').textContent = `${Math.round(m.progress * 100)}%`; }
+      });
+      await ingestReceipt(res.data.text || '');
+    } catch (err) { console.error(err); toast('Не удалось распознать чек'); }
+    finally { $('ocrProgress').hidden = true; $('ocrStatus').textContent = ''; }
+  });
+
+  async function ingestReceipt(text) {
+    if (!text.trim()) return toast('Текст чека пуст — снимите ближе и чётче');
+    if (Storage.settings().aiKey) {
+      try {
+        toast('🤖 AI разбирает чек…', 4000);
+        const items = await AI.parseReceipt(text, CUR());
+        if (items.length) { makeDraft(items); return; }
+      } catch (err) { console.warn(err); }
+    }
+    const lines = text.split('\n').map(l => l.trim())
+      .filter(l => l && !/summe|total|итог|bar|karte|change|wec?hselgeld|zwischensumme|mwst|ust|vat|edv|ungef/i.test(l));
+    const items = [];
+    for (const line of lines) {
+      const it = parseChunk(line.replace(/\s{3,}/g, ' ').replace(/^[xX*]\s*/, ''));
+      if (it && it.price > 0 && it.name.length > 1) items.push(it);
+    }
+    if (!items.length) return toast('Позиции не найдены — введите вручную или добавьте AI-ключ');
+    makeDraft(items);
+  }
+
+  /* Черновик */
+  function fillCatSelect(sel, chosen) {
+    sel.innerHTML = CATS.map(c => `<option value="${c.id}" ${c.id === chosen ? 'selected' : ''}>${c.name}</option>`).join('');
+  }
+
   function makeDraft(items) {
     state.draft = items.map(it => ({
       id: uid(), name: it.name || 'Позиция', qty: Number(it.qty) || 1,
       price: Number(it.price) || 0, cat: it.cat || guessCat(it.name)
-    }));
+    })).filter(it => (it.name.length > 1 || it.price > 0));
     $('draftDate').value = todayISO();
     renderDraft();
     $('draftArea').hidden = false;
@@ -191,10 +400,7 @@
       row.querySelector('[data-f=qty]').addEventListener('input', e => { it.qty = Number(e.target.value) || 1; });
       row.querySelector('[data-f=price]').addEventListener('input', e => { it.price = Number(e.target.value) || 0; });
       row.querySelector('select').addEventListener('change', e => { it.cat = e.target.value; });
-      row.querySelector('.del').addEventListener('click', () => {
-        state.draft = state.draft.filter(x => x.id !== it.id);
-        renderDraft();
-      });
+      row.querySelector('.del').addEventListener('click', () => { state.draft = state.draft.filter(x => x.id !== it.id); renderDraft(); });
       wrap.appendChild(row);
     });
     $('draftTotal').textContent = fmt(total);
@@ -203,28 +409,23 @@
 
   $('btnDiscard').addEventListener('click', () => {
     state.draft = []; $('draftArea').hidden = true;
-    $('manualInput').value = ''; $('receiptPreview').hidden = true;
-    $('manualArea').hidden = true;
+    $('manualInput').value = ''; $('manualArea').hidden = true; $('receiptPreview').hidden = true;
   });
 
   $('btnSaveDraft').addEventListener('click', () => {
     if (!state.draft.length) return toast('Нечего сохранять');
-    const cat = $('draftCat').value;
     const total = state.draft.reduce((s, it) => s + it.qty * it.price, 0);
     Storage.addTx({
-      id: uid(),
-      date: $('draftDate').value || todayISO(),
-      cat,
-      items: state.draft.map(({ name, qty, price, cat: icat }) => ({ name, qty, price, cat: icat })),
-      total,
-      source: state.source
+      id: uid(), date: $('draftDate').value || todayISO(), cat: $('draftCat').value,
+      items: state.draft.map(({ name, qty, price, cat }) => ({ name, qty, price, cat })),
+      total, source: state.source
     });
     state.draft = [];
     $('draftArea').hidden = true;
     $('manualInput').value = ''; $('manualArea').hidden = true; $('receiptPreview').hidden = true;
     toast('Сохранено ✓');
     state.month = todayISO().slice(0, 7);
-    renderMonthLabel(); renderTx();
+    renderMonthLabel();
   });
 
   $('btnAiFix').addEventListener('click', async () => {
@@ -242,25 +443,18 @@
         renderDraft();
         toast('AI поправил черновик ✓');
       }
-    } catch (err) { AI.showErr($('toast') ?? {}, err); }
-    btn.disabled = false; btn.textContent = '🤖 Умная правка (AI)';
+    } catch (err) { toast(err.message === 'no-key' ? 'Нет AI-ключа' : 'Ошибка AI: ' + err.message); }
+    btn.disabled = false; btn.textContent = '🤖 Умная правка';
   });
-  state.source = 'manual';
 
-  ['btnVoice', 'photoInput', 'btnManual', 'btnParseText'].forEach(() => {});
-  $('btnVoice').addEventListener('click', () => { state.source = 'voice'; });
-  $('photoInput').addEventListener('change', () => { state.source = 'photo'; });
-  $('btnManual').addEventListener('click', () => { state.source = 'manual'; });
-
-  /* ---------- Операции ---------- */
+  /* Операции */
   function renderTx() {
     const list = $('txList');
     list.innerHTML = '';
     const txs = Storage.txsForMonth(state.month)
-      .filter(t => !state.filterCat || t.cat === state.filterCat || t.items.some(i => i.cat === state.filterCat));
+      .filter(t => !state.filterCat || t.cat === state.filterCat || (t.items || []).some(i => i.cat === state.filterCat));
     $('txEmpty').hidden = txs.length > 0;
-    let sum = 0;
-    let lastDay = '';
+    let sum = 0, lastDay = '';
     for (const t of txs) {
       sum += t.total;
       if (t.date !== lastDay) {
@@ -270,27 +464,24 @@
         h.textContent = new Date(t.date).toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
         list.appendChild(h);
       }
-      const c = catById(t.items[0]?.cat || t.cat);
+      const c = catById((t.items || [])[0]?.cat || t.cat);
       const row = document.createElement('div');
       row.className = 'tx-row';
       row.innerHTML = `
         <div class="tx-main">
-          <div class="tx-title">${esc(t.items.map(i => i.name).join(' + '))}<span class="badge">${c.name}</span></div>
-          <div class="tx-meta">${t.source === 'voice' ? '🎤' : t.source === 'photo' ? '📷' : '⌨️'} ${t.date}</div>
+          <div class="tx-title">${esc((t.items || []).map(i => i.name).join(' + '))}${t.note ? ' ' + esc(t.note) : ''}<span class="badge">${c.name}</span></div>
+          <div class="tx-meta">${t.source === 'voice' ? '🎤' : t.source === 'photo' ? '📷' : t.source === 'basket' ? '🛒' : '⌨️'} ${t.date}</div>
         </div>
         <div class="tx-amount">${t.total.toFixed(2)}${CUR()}</div>
         <button class="tx-del" title="удалить">🗑</button>`;
-      row.querySelector('.tx-del').addEventListener('click', () => {
-        Storage.delTx(t.id);
-        renderTx(); toast('Удалено');
-      });
+      row.querySelector('.tx-del').addEventListener('click', () => { Storage.delTx(t.id); renderTx(); toast('Удалено'); });
       list.appendChild(row);
     }
     $('txMonthSum').textContent = txs.length ? `${sum.toFixed(2)}${CUR()}` : '';
   }
   $('filterCat').addEventListener('change', e => { state.filterCat = e.target.value; renderTx(); });
 
-  /* ---------- Бюджет ---------- */
+  /* Бюджет */
   function renderBudget() {
     const spent = Storage.spentByCat(state.month);
     const limits = Storage.budgetFor(state.month);
@@ -306,20 +497,18 @@
       row.innerHTML = `
         <div class="budget-head">
           <span>${c.name}</span>
-          <span class="limit">${s.toFixed(2)}${CUR()} / <input type="number" min="0" step="any" placeholder="лимит" value="${lim}" data-cat="${c.id}"></span>
+          <span class="limwrap">${s.toFixed(2)}${CUR()} / <input type="number" min="0" step="any" placeholder="лимит" value="${lim}" data-cat="${c.id}"></span>
         </div>
         <div class="bar"><div class="${cls}" style="width:${pct}%"></div></div>`;
       wrap.appendChild(row);
     });
   }
   $('btnSaveBudget').addEventListener('click', () => {
-    document.querySelectorAll('#budgetList input[data-cat]').forEach(inp => {
-      Storage.setDefault(inp.dataset.cat, inp.value);
-    });
-    toast('Лимиты сохранены — применяются к каждому месяцу ✓');
+    document.querySelectorAll('#budgetList input[data-cat]').forEach(inp => Storage.setDefault(inp.dataset.cat, inp.value));
+    toast('Лимиты сохранены ✓');
   });
 
-  /* ---------- Цели ---------- */
+  /* Цели */
   function renderGoals() {
     const wrap = $('goalsList');
     wrap.innerHTML = '';
@@ -330,13 +519,10 @@
       row.innerHTML = `
         <span style="min-width:84px">${esc(g.name)}</span>
         <div class="bar"><div style="width:${pct}%"></div></div>
-        <span style="font-size:.78rem;color:var(--muted)">${(g.saved || 0).toFixed(0)}/${g.target.toFixed(0)}</span>
+        <span style="font-size:.74rem;color:var(--muted)">${(g.saved || 0).toFixed(0)}/${g.target.toFixed(0)}</span>
         <button class="grow" title="пополнить">+10</button>
-        <button class="rm" style="border:0;background:none;cursor:pointer">✕</button>`;
-      row.querySelector('.grow').addEventListener('click', () => {
-        Storage.addGoalAmount(g.id, g.target >= 500 ? 10 : 1);
-        renderGoals();
-      });
+        <button class="rm" title="удалить">✕</button>`;
+      row.querySelector('.grow').addEventListener('click', () => { Storage.addGoalAmount(g.id, g.target >= 500 ? 10 : 1); renderGoals(); });
       row.querySelector('.rm').addEventListener('click', () => { Storage.delGoal(g.id); renderGoals(); });
       wrap.appendChild(row);
     });
@@ -350,7 +536,7 @@
     renderGoals();
   });
 
-  /* ---------- Обзор + графики ---------- */
+  /* Обзор */
   function renderOverview() {
     const spent = Storage.spentByCat(state.month);
     const total = Object.values(spent).reduce((a, b) => a + b, 0);
@@ -361,29 +547,25 @@
     $('statDay').textContent = txs.length ? `${(total / Math.max(1, Math.min(dim, now.getDate()))).toFixed(2)}${CUR()}` : '—';
     $('statCount').textContent = txs.length;
 
-    const labels = CATS.filter(c => spent[c.id] > 0).map(c => c.name);
-    const vals = CATS.filter(c => spent[c.id] > 0).map(c => spent[c.id]);
-    const colors = CATS.filter(c => spent[c.id] > 0).map(c => c.color);
+    const vis = CATS.filter(c => spent[c.id] > 0);
     if (state.donut) state.donut.destroy();
     state.donut = new Chart($('donutChart'), {
       type: 'doughnut',
-      data: { labels, datasets: [{ data: vals, backgroundColor: colors, borderWidth: 2 }] },
+      data: { labels: vis.map(c => c.name), datasets: [{ data: vis.map(c => spent[c.id]), backgroundColor: vis.map(c => c.color), borderWidth: 2 }] },
       options: { plugins: { legend: { position: 'bottom' } } }
     });
 
-    const months = [];
-    const sums = [];
+    const months = [], sums = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const mk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       months.push(d.toLocaleDateString('ru-RU', { month: 'short' }));
-      const s = Storage.spentByCat(mk);
-      sums.push(Object.values(s).reduce((a, b) => a + b, 0));
+      sums.push(Object.values(Storage.spentByCat(mk)).reduce((a, b) => a + b, 0));
     }
     if (state.bar) state.bar.destroy();
     state.bar = new Chart($('barChart'), {
       type: 'bar',
-      data: { labels: months, datasets: [{ label: `Расходы, ${CUR()}`, data: sums, backgroundColor: '#10b981', borderRadius: 8 }] },
+      data: { labels: months, datasets: [{ label: `Расходы, ${CUR()}`, data: sums, backgroundColor: '#0fa976', borderRadius: 8 }] },
       options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
     });
   }
@@ -392,7 +574,6 @@
     const out = $('adviceOut');
     if (!Storage.settings().aiKey) return AI.showErr(out, new Error('no-key'));
     const spent = Storage.spentByCat(state.month);
-    const limits = Storage.budgetFor(state.month);
     const prev = (() => {
       const [y, m] = state.month.split('-').map(Number);
       const d = new Date(y, m - 2, 1);
@@ -402,64 +583,100 @@
     out.textContent = '🤖 Анализирую ваш бюджет…';
     try {
       out.textContent = await AI.advice({
-        month: state.month,
-        currency: CUR(),
-        spentByCategory: spent,
-        limits,
-        prevMonthSpent: prev,
-        goals: Storage.goals()
+        month: state.month, currency: CUR(), spentByCategory: spent,
+        limits: Storage.budgetFor(state.month), prevMonthSpent: prev, goals: Storage.goals()
       }, CUR());
     } catch (err) { AI.showErr(out, err); }
     out.classList.remove('thinking');
   });
 
-  /* ---------- Акции ---------- */
-  function renderMarkets() {
-    const wrap = $('marketsList');
+  /* ============ Акции ============ */
+  async function openDeals() {
+    $('dealsFresh').textContent = 'грузим…';
+    try {
+      const data = await Deals.load();
+      $('dealsFresh').textContent = `${data.count} акций`;
+      const upd = new Date(data.updated).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+      $('dealsFreshness').textContent = `Собрано автоматически ${upd} для zip ${data.zip}. Обновление каждый день ≈06:30 (GitHub Actions). Список товаров: config/terms.txt в репозитории.`;
+      renderDealGrid(Deals.topDeals(data.offers, 24));
+    } catch (e) {
+      $('dealsFresh').textContent = 'офлайн';
+      $('dealsFreshness').textContent = 'Не удалось загрузить акции — проверьте интернет.';
+    }
+    renderMarketsMini();
+  }
+
+  function offerCard(o) {
+    const d = Deals.discountPct(o);
+    const a = document.createElement('a');
+    a.className = 'deal-card';
+    if (o.e) { a.href = o.e; a.target = '_blank'; a.rel = 'noopener'; }
+    a.innerHTML = `
+      <img src="${esc(o.img)}" loading="lazy" alt="">
+      <div class="dc-name">${esc(o.n)}${o.b ? ` · ${esc(o.b)}` : ''}</div>
+      <div class="dc-row"><span class="dc-price">${fmt(o.p)}</span>${o.op ? `<span class="dc-old">${fmt(o.op)}</span>` : d ? `<span class="dc-old">−${d}%</span>` : ''}</div>
+      <div class="dc-store">${esc(o.s[0]?.n || '')}</div>`;
+    return a;
+  }
+
+  function renderDealGrid(list) {
+    const grid = $('dealsGrid');
+    grid.innerHTML = '';
+    if (!list.length) {
+      grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Ничего не нашлось 🤷</div>';
+      return;
+    }
+    list.forEach(o => grid.appendChild(offerCard(o)));
+  }
+
+  $('btnDealsSearch').addEventListener('click', loadSearch);
+  $('dealsSearch').addEventListener('keydown', e => { if (e.key === 'Enter') loadSearch(); });
+  async function loadSearch() {
+    const q = $('dealsSearch').value.trim();
+    if (!q) return;
+    const data = await Deals.load();
+    const qn = Deals.expandQuery(q);
+    const terms = qn.split(' ').filter(w => w.length > 2).map(w => w.slice(0, 5));
+    const list = data.offers.filter(o => {
+      const hay = Deals.expandQuery([o.n, o.b, o.d].filter(Boolean).join(' '));
+      return terms.some(w => hay.includes(w));
+    }).slice(0, 30);
+    renderDealGrid(list);
+    $('dealsSearch').blur();
+  }
+
+  function renderMarketsMini() {
+    const wrap = $('marketsMini');
     wrap.innerHTML = '';
-    Storage.settings().markets.forEach((m, i) => {
+    Storage.stores().forEach(s => {
       const row = document.createElement('div');
       row.className = 'market-row';
       row.innerHTML = `
-        <div class="logo" style="background:${m.color || '#10b981'}">${esc((m.name || '?').slice(0, 3).toUpperCase())}</div>
-        <a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.name)}<small>открыть акции ↗</small></a>
-        <button class="rm" title="удалить">✕</button>`;
-      row.querySelector('.rm').addEventListener('click', () => {
-        const list = Storage.settings().markets.filter((_, j) => j !== i);
-        Storage.setMarkets(list);
-        renderMarkets();
-      });
+        <div class="logo" style="background:${esc(s.color || '#0fa976')}">${esc((s.name || '?').slice(0, 3).toUpperCase())}</div>
+        <a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.name)}<small>акции ↗</small></a>
+        <span class="mini-dist">🚗 ${s.dist || '—'} км</span>`;
       wrap.appendChild(row);
     });
   }
-  $('btnAddMarket').addEventListener('click', () => {
-    const name = $('mkName').value.trim();
-    let url = $('mkUrl').value.trim();
-    if (!name || !/^https?:\/\//.test(url)) return toast('Название и ссылка https://… обязательны');
-    const list = Storage.settings().markets.concat([{ name, url, color: '#10b981' }]);
-    Storage.setMarkets(list);
-    $('mkName').value = ''; $('mkUrl').value = '';
-    renderMarkets();
-  });
+  $('btnGoStores').addEventListener('click', () => switchTab('settings'));
 
   $('btnAiDeals').addEventListener('click', async () => {
     const out = $('dealsOut');
     const text = $('dealsInput').value.trim();
-    if (!text) return toast('Вставьте список акций из магазина');
+    if (!text) return toast('Вставьте список акций');
     if (!Storage.settings().aiKey) return AI.showErr(out, new Error('no-key'));
     out.classList.add('thinking');
     out.textContent = '🤖 Подбираю лучшее для вашей семьи…';
-    const recent = Storage.txsForMonth(state.month).flatMap(t => t.items).map(i => i.name);
     try {
-      out.textContent = await AI.pickDeals(text, recent, {
-        limits: Storage.budgetFor(state.month),
-        spent: Storage.spentByCat(state.month)
+      const basket = Storage.basket().map(b => `${b.qty}× ${b.name}`).join(', ');
+      out.textContent = await AI.pickDeals(text, basket, {
+        limits: Storage.budgetFor(state.month), spent: Storage.spentByCat(state.month), zip: Storage.settings().zip
       }, CUR());
     } catch (err) { AI.showErr(out, err); }
     out.classList.remove('thinking');
   });
 
-  /* ---------- Настройки ---------- */
+  /* ============ Настройки ============ */
   function loadSettingsUI() {
     const s = Storage.settings();
     $('setCurrency').value = s.currency;
@@ -478,6 +695,43 @@
     toast('Настройки сохранены ✓');
   });
 
+  function renderStoreEdit() {
+    const wrap = $('storeEdit');
+    wrap.innerHTML = '';
+    Storage.stores().forEach((s, i) => {
+      const row = document.createElement('div');
+      row.className = 'store-edit-row';
+      row.innerHTML = `
+        <input type="text" value="${esc(s.name)}" data-i="${i}" data-f="name">
+        <span class="kmwrap">🚗 <input type="number" min="0" step="0.1" value="${s.dist ?? ''}" data-i="${i}" data-f="dist"> км</span>
+        <button class="rm" title="удалить">✕</button>`;
+      row.querySelector('.rm').addEventListener('click', () => {
+        Storage.setStores(Storage.stores().filter((_, j) => j !== i));
+        renderStoreEdit();
+      });
+      wrap.appendChild(row);
+    });
+  }
+  $('btnSaveStores').addEventListener('click', () => {
+    const stores = Storage.stores().map(s => ({ ...s }));
+    document.querySelectorAll('#storeEdit [data-i]').forEach(inp => {
+      const i = Number(inp.dataset.i);
+      if (inp.dataset.f === 'name') stores[i].name = inp.value.trim() || stores[i].name;
+      if (inp.dataset.f === 'dist') stores[i].dist = inp.value === '' ? null : Number(inp.value);
+    });
+    Storage.setStores(stores);
+    toast('Расстояния сохранены ✓');
+  });
+  $('btnAddMarket').addEventListener('click', () => {
+    const name = $('mkName').value.trim();
+    const url = $('mkUrl').value.trim();
+    if (!name || !/^https?:\/\//.test(url)) return toast('Название и ссылка https://…');
+    Storage.setStores(Storage.stores().concat([{ name, url, color: '#0fa976', dist: null, key: name.toLowerCase() }]));
+    $('mkName').value = ''; $('mkUrl').value = '';
+    renderStoreEdit();
+  });
+
+  /* Данные */
   $('btnExport').addEventListener('click', () => Storage.export());
   $('importFile').addEventListener('change', e => {
     const f = e.target.files[0];
@@ -485,25 +739,21 @@
     e.target.value = '';
     const r = new FileReader();
     r.onload = () => {
-      try {
-        Storage.importJSON(r.result);
-        toast('Импорт готов ✓');
-        renderMonthLabel(); renderTx();
-      } catch (err) { toast('Ошибка импорта: ' + err.message); }
+      try { Storage.importJSON(r.result); toast('Импорт готов ✓'); renderMonthLabel(); }
+      catch (err) { toast('Ошибка импорта: ' + err.message); }
     };
     r.readAsText(f);
   });
   let wipeCount = 0;
   $('btnWipe').addEventListener('click', () => {
-    wipeCount++;
-    if (wipeCount < 2) return toast('Нажмите ещё раз для подтверждения');
+    if (++wipeCount < 2) return toast('Нажмите ещё раз для подтверждения');
     Storage.wipe();
     toast('Данные удалены');
-    renderMonthLabel(); renderTx();
+    renderMonthLabel(); renderBasket();
     wipeCount = 0;
   });
 
-  /* ---------- PWA: SW + установка ---------- */
+  /* PWA */
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(console.warn));
   }
@@ -521,15 +771,7 @@
     $('btnInstall').hidden = true;
   });
 
-  /* ---------- Утилиты ---------- */
-  function esc(s) {
-    return String(s ?? '').replace(/[&<>"']/g, ch => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    }[ch]));
-  }
-
-  /* ---------- Старт ---------- */
+  /* Старт */
   renderMonthLabel();
-  renderTx();
-  window.__FB = { state };
+  renderBasket();
 })();

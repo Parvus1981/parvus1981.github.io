@@ -1,30 +1,38 @@
 /* Хранилище данных в localStorage — всё остаётся на устройстве пользователя */
 const Storage = (() => {
-  const KEY = 'family-budget-v1';
-  const DEFAULT_MARKETS = [
-    { name: 'Lidl', url: 'https://www.lidl.de/c/aktuelle-angebote', color: '#0050aa' },
-    { name: 'Lidl AT', url: 'https://www.lidl.at/c/aktuelle-wochenangebote', color: '#0050aa' },
-    { name: 'Hofer/Aldi', url: 'https://www.hofer.at/de/angebote.html', color: '#0a2896' },
-    { name: 'Billa', url: 'https://www.billa.at/angebote', color: '#e30613' },
-    { name: 'Spar', url: 'https://www.interspar.at/shop/lebensmittel/aktuelle-angebote/', color: '#007833' },
-    { name: 'Penny', url: 'https://www.penny.at/angebote', color: '#d81e05' },
-    { name: 'Kaufland', url: 'https://www.kaufland.de/aktuelles/angebote.html', color: '#e10914' },
-    { name: 'Lidl UA', url: 'https://www.lidl-ukraine.ua/aktsii/', color: '#0050aa' }
+  const KEY = 'family-budget-v2';
+  const DEFAULT_STORES = [
+    { name: 'K+K Klaas & Kock', url: 'https://www.klaas-und-kock.de/angebote/unsere-angebote/', color: '#c8102e', dist: 1.0, key: 'klaas-kock' },
+    { name: 'Lidl', url: 'https://www.lidl.de/filialen', color: '#0050aa', dist: 1.0, key: 'lidl' },
+    { name: 'Netto Marken-Discount', url: 'https://www.netto-online.de/angebote', color: '#ffcc00', dist: 1.5, key: 'netto-marken-discount' },
+    { name: 'REWE', url: 'https://www.rewe.de/angebote/', color: '#cc071e', dist: 1.2, key: 'rewe' },
+    { name: 'Combi', url: 'https://www.combi.de/angebote', color: '#e30613', dist: 1.6, key: 'combi' },
+    { name: 'Kaufland', url: 'https://www.kaufland.de/aktuelles/angebote.html', color: '#e10914', dist: 3.0, key: 'kaufland' },
+    { name: 'PENNY', url: 'https://www.penny.de/angebote', color: '#d81e05', dist: 2.0, key: 'penny' },
+    { name: 'Getränke Hoffmann', url: 'https://www.gh-offers.de/', color: '#0e2c66', dist: 2.2, key: 'getraenke-hoffmann' },
+    { name: 'EDEKA', url: 'https://www.edeka.de/angebote.jsp', color: '#001e50', dist: 2.5, key: 'edeka' },
+    { name: 'ALDI', url: 'https://www.aldi-nord.de/unsere-angebote.html', color: '#0a2896', dist: 2.4, key: 'aldi' },
+    { name: 'dm', url: 'https://www.dm.de/angebote', color: '#002878', dist: 1.8, key: 'dm' },
+    { name: 'Rossmann', url: 'https://www.rossmann.de/de/aktuelle-prospekte', color: '#c3002d', dist: 1.8, key: 'rossmann' }
   ];
+
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
   function blank() {
     return {
       settings: {
         currency: '€',
-        voiceLang: 'de-DE',
+        voiceLang: 'ru-RU',
         ocrLang: 'deu+rus+eng',
         aiKey: '',
-        markets: DEFAULT_MARKETS
+        stores: DEFAULT_STORES,
+        zip: '48431'
       },
       txs: [],
-      budgets: {},          // { 'YYYY-MM': { catId: limit } }
-      defaults: {},         // { catId: limit }
-      goals: []             // { id, name, target, saved }
+      budgets: {},
+      defaults: {},
+      goals: [],
+      basket: []
     };
   }
 
@@ -33,13 +41,13 @@ const Storage = (() => {
   function load() {
     try {
       const raw = localStorage.getItem(KEY);
-      if (!raw) return blank();
-      const parsed = JSON.parse(raw);
       const base = blank();
+      if (!raw) return base;
+      const parsed = JSON.parse(raw);
       const merged = { ...base, ...parsed };
       merged.settings = { ...base.settings, ...parsed.settings };
-      if (!Array.isArray(merged.settings.markets) || !merged.settings.markets.length) {
-        merged.settings.markets = base.settings.markets;
+      if (!Array.isArray(merged.settings.stores) || !merged.settings.stores.length) {
+        merged.settings.stores = base.settings.stores;
       }
       return merged;
     } catch (e) {
@@ -92,8 +100,27 @@ const Storage = (() => {
       if (g) { g.saved = Math.min(g.target, (g.saved || 0) + amt); save(); }
     },
 
+    basket: () => data.basket,
+    addToBasket(item) {
+      const norm = item.name.trim().toLowerCase();
+      const same = data.basket.find(b => b.name.trim().toLowerCase() === norm);
+      if (same) same.qty += item.qty || 1;
+      else data.basket.push({ id: uid(), name: item.name, qty: item.qty || 1, done: false });
+      save();
+    },
+    updateBasket(id, patch) {
+      const b = data.basket.find(x => x.id === id);
+      if (b) { Object.assign(b, patch); save(); }
+    },
+    delFromBasket(id) { data.basket = data.basket.filter(b => b.id !== id); save(); },
+    clearCheckedBasket() { data.basket = data.basket.filter(b => !b.done); save(); },
+
     updateSettings(patch) { data.settings = { ...data.settings, ...patch }; save(); },
-    setMarkets(list) { data.settings.markets = list; save(); },
+    stores: () => data.settings.stores,
+    setStores(list) { data.settings.stores = list; save(); },
+    storeByKey(u) {
+      return data.settings.stores.find(s => s.key === u || s.name.toLowerCase() === (u || '').toLowerCase()) || null;
+    },
 
     export() {
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });

@@ -3,13 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#10b981">
-<title>Семейный бухгалтер</title>
+<meta name="theme-color" content="#0b3d2e">
+<title>Семейный бухгалтер v2</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/styles.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js" defer></script>
@@ -18,8 +20,11 @@
 
 <header class="app-header">
   <div class="brand">
-    <img src="icons/icon-192.png" alt="" width="28" height="28">
-    <h1>Семейный бухгалтер</h1>
+    <img src="icons/icon-192.png" alt="" width="30" height="30">
+    <div>
+      <h1>Семейный бухгалтер v2</h1>
+      <span class="sub" id="headerSub">Rheine · €</span>
+    </div>
   </div>
   <div class="month-nav">
     <button id="prevMonth" class="icon-btn" aria-label="Прошлый месяц">‹</button>
@@ -30,10 +35,41 @@
 
 <main id="screens">
 
-  <!-- ===== ADD ===== -->
-  <section class="screen active" id="screen-add">
+  <!-- ===== BASKET (главная) ===== -->
+  <section class="screen active" id="screen-shop">
+    <div class="hero card">
+      <h2>Скажи список — узнаешь, где сегодня дешевле</h2>
+      <div class="basket-mic-row">
+        <button id="btnBasketVoice" class="mic-fab">🎙️</button>
+        <div class="mic-side">
+          <div id="basketVoiceLine" class="voice-line">Нажми и говори: «молоко, хлеб, 6 яиц, порошок…»</div>
+          <div class="quick-add">
+            <input type="text" id="basketInput" placeholder="…или впишите товар">
+            <button id="btnBasketAdd" class="btn round">➕</button>
+          </div>
+        </div>
+      </div>
+      <div id="voiceHint" class="voice-hint" hidden></div>
+    </div>
+
+    <div class="card" id="basketCard" hidden>
+      <div class="card-head">
+        <h2>🛒 Корзина <span id="basketCount" class="cnt"></span></h2>
+        <button id="btnBasketClear" class="linklike">очистить ✓</button>
+      </div>
+      <div id="basketList"></div>
+      <div class="draft-actions">
+        <button id="btnCompare" class="btn primary grow2">🔍 Где сегодня дешевле?</button>
+      </div>
+    </div>
+
+    <div id="compareOut"></div>
+  </section>
+
+  <!-- ===== MONEY (учёт) ===== -->
+  <section class="screen" id="screen-money">
     <div class="card">
-      <h2>Добавить расход</h2>
+      <div class="card-head"><h2>Добавить расход</h2><span class="sub">голос · чек · вручную</span></div>
       <div class="add-buttons">
         <button id="btnVoice" class="big-btn voice">🎤 <span>Голосом</span></button>
         <label class="big-btn photo">📷 <span>Фото чека</span>
@@ -42,56 +78,50 @@
         <button id="btnManual" class="big-btn manual">⌨️ <span>Вручную</span></button>
       </div>
       <div id="voiceStatus" class="voice-status" hidden>
-        <span class="pulse">🎙️</span> Говорите… (например: «молоко 1.29, хлеб 2.4»)
+        <span class="live-dot"></span> <span id="voiceText">Говорите…</span>
       </div>
-
       <div id="manualArea" hidden>
-        <textarea id="manualInput" rows="3" placeholder="Например: молоко 1.29; хлеб 2.40; проезд 2 ребёнок"></textarea>
+        <textarea id="manualInput" rows="3" placeholder="Например: молоко 1.29; хлеб 2.40; проезд 2.8"></textarea>
         <button id="btnParseText" class="btn">Распознать →</button>
       </div>
-
       <div id="ocrProgress" class="ocr-progress" hidden>
         <div class="spinner"></div> Распознаю чек… <span id="ocrStatus"></span>
       </div>
       <img id="receiptPreview" class="receipt-preview" hidden alt="чек">
+    </div>
 
-      <div id="draftArea" hidden>
-        <h3>Черновик (<span id="draftTotal">0</span>) — проверьте и сохраните</h3>
-        <div id="draftItems"></div>
-        <div class="draft-row">
-          <label>Категория по умолчанию</label>
-          <select id="draftCat"></select>
-        </div>
-        <div class="draft-row">
-          <label>Дата</label>
-          <input type="date" id="draftDate">
-        </div>
-        <div class="draft-actions">
-          <button id="btnAiFix" class="btn subtle">🤖 Умная правка (AI)</button>
-          <button id="btnSaveDraft" class="btn primary">💾 Сохранить</button>
-          <button id="btnDiscard" class="btn subtle">Отмена</button>
-        </div>
+    <div id="draftArea" class="card" hidden>
+      <h3>Черновик (<span id="draftTotal">0</span>) — проверьте и сохраните</h3>
+      <div id="draftItems"></div>
+      <div class="draft-row">
+        <label>Категория по умолчанию</label>
+        <select id="draftCat"></select>
+      </div>
+      <div class="draft-row">
+        <label>Дата</label>
+        <input type="date" id="draftDate">
+      </div>
+      <div class="draft-actions">
+        <button id="btnAiFix" class="btn subtle">🤖 Умная правка</button>
+        <button id="btnSaveDraft" class="btn primary">💾 Сохранить</button>
+        <button id="btnDiscard" class="btn subtle">Отмена</button>
       </div>
     </div>
-  </section>
 
-  <!-- ===== TRANSACTIONS ===== -->
-  <section class="screen" id="screen-tx">
     <div class="card">
-      <h2>Операции</h2>
+      <div class="card-head"><h2>🧾 Операции</h2><span id="txMonthSum" class="sum-label"></span></div>
       <div class="filter-row">
         <select id="filterCat"><option value="">Все категории</option></select>
-        <span id="txMonthSum" class="sum-label"></span>
       </div>
       <div id="txList"></div>
-      <div id="txEmpty" class="empty" hidden>Пока пусто. Добавьте первую покупку! 🎤📷</div>
+      <div id="txEmpty" class="empty" hidden>Пока пусто. Скажите голосом первую покупку! 🎤</div>
     </div>
   </section>
 
   <!-- ===== BUDGET ===== -->
   <section class="screen" id="screen-budget">
     <div class="card">
-      <h2>Бюджет на месяц <span id="budgetMonth"></span></h2>
+      <h2>💰 Лимиты на <span id="budgetMonth"></span></h2>
       <div id="budgetList"></div>
       <button id="btnSaveBudget" class="btn primary">Сохранить лимиты</button>
     </div>
@@ -101,7 +131,7 @@
       <div class="goal-form">
         <input type="text" id="goalName" placeholder="Цель (например: отпуск)">
         <input type="number" id="goalAmount" placeholder="Сумма" min="1" step="any">
-        <button id="btnAddGoal" class="btn">➕</button>
+        <button id="btnAddGoal" class="btn round">➕</button>
       </div>
     </div>
   </section>
@@ -131,24 +161,29 @@
   <!-- ===== DEALS ===== -->
   <section class="screen" id="screen-deals">
     <div class="card">
-      <h2>🏷️ Супермаркеты и акции</h2>
-      <p class="hint">Откройте актуальные акции магазина, нажмите «Поделиться»/скопируйте список — и вставьте его сюда. AI подберёт лучшее под ваш бюджет и привычки.</p>
-      <div id="marketsList"></div>
-      <details class="add-market">
-        <summary>➕ Добавить свой магазин</summary>
-        <div class="goal-form">
-          <input type="text" id="mkName" placeholder="Название (Lidl)">
-          <input type="url" id="mkUrl" placeholder="https://…/angebote">
-          <button id="btnAddMarket" class="btn">➕</button>
-        </div>
-      </details>
+      <div class="card-head">
+        <h2>🏷️ Акции: <span id="dealZip"></span></h2>
+        <span id="dealsFresh" class="sub"></span>
+      </div>
+      <div class="quick-add">
+        <input type="text" id="dealsSearch" placeholder="Поиск по всем акциям рядом…">
+        <button id="btnDealsSearch" class="btn round">🔎</button>
+      </div>
+      <div id="dealsFreshness" class="hint"></div>
+      <div id="dealsGrid" class="deals-grid"></div>
     </div>
+
     <div class="card">
-      <h2>🤖 AI-подбор выгодных покупок</h2>
-      <textarea id="dealsInput" rows="6" placeholder="Вставьте сюда список акций, скопированный со страницы магазина, например:
-Молоко 3,5% — 0.99 € (было 1.29)
-Курица целая — 4.49 €
-Шоколад Ritter Sport — 0.79"></textarea>
+      <div class="card-head"><h2>🏪 Мои магазины</h2><button id="btnGoStores" class="linklike">настроить</button></div>
+      <div id="marketsMini"></div>
+    </div>
+
+    <div class="card">
+      <h2>🤖 AI-разбор листков</h2>
+      <p class="hint">K+K и мелкие магазины не отдают акции в машину — откройте их листок, скопируйте текст и вставьте: AI выберет выгодное для вашей корзины.</p>
+      <textarea id="dealsInput" rows="5" placeholder="Вставьте список акций, например:
+Молоко 3,5% — 0.99 € (statt 1.29)
+Hackbraten — 3.99"></textarea>
       <button id="btnAiDeals" class="btn primary">Подобрать выгоды (AI)</button>
       <div id="dealsOut" class="ai-out"></div>
     </div>
@@ -157,7 +192,7 @@
   <!-- ===== SETTINGS ===== -->
   <section class="screen" id="screen-settings">
     <div class="card">
-      <h2>⚙️ Настройки</h2>
+      <h2>⚙️ Основное</h2>
       <div class="draft-row"><label>Валюта</label>
         <select id="setCurrency">
           <option value="€">€ евро</option><option value="₴">₴ грн</option>
@@ -179,22 +214,38 @@
         </select>
       </div>
     </div>
+
+    <div class="card">
+      <h2>🏪 Магазины: расстояние</h2>
+      <p class="hint">Укажите, сколько км до каждого магазина — сравнение цен учтёт это в рекомендации.</p>
+      <div id="storeEdit"></div>
+      <div class="goal-form">
+        <input type="text" id="mkName" placeholder="Свой магазин">
+        <input type="url" id="mkUrl" placeholder="https://…/angebote">
+      </div>
+      <div class="draft-actions">
+        <button id="btnAddMarket" class="btn">➕ Добавить магазин</button>
+        <button id="btnSaveStores" class="btn primary">💾 Сохранить</button>
+      </div>
+    </div>
+
     <div class="card">
       <h2>🤖 AI-ключ (Mistral)</h2>
-      <p class="hint">Получите бесплатный ключ на <a href="https://console.mistral.ai" target="_blank" rel="noopener">console.mistral.ai</a>. Ключ хранится только в вашем браузере.</p>
+      <p class="hint">Бесплатный ключ: <a href="https://console.mistral.ai" target="_blank" rel="noopener">console.mistral.ai</a>. Нужен для резервного голоса, разбора чеков AI и советов. Ключ хранится только в вашем браузере.</p>
       <input type="password" id="setAiKey" placeholder="API-ключ Mistral" autocomplete="off">
       <button id="btnSaveSettings" class="btn primary">Сохранить настройки</button>
     </div>
+
     <div class="card">
       <h2>📦 Данные</h2>
       <div class="draft-actions">
-        <button id="btnExport" class="btn">⬇️ Экспорт (файл)</button>
+        <button id="btnExport" class="btn">⬇️ Экспорт</button>
         <label class="btn">⬆️ Импорт<input type="file" id="importFile" accept=".json" hidden></label>
         <button id="btnWipe" class="btn danger">🗑 Удалить всё</button>
       </div>
-      <p class="hint">Экспорт/импорт — способ перенести бюджет между членами семьи или устройства.</p>
     </div>
-    <div class="card install-card" id="installCard">
+
+    <div class="card install-card">
       <h2>📲 Установить на телефон</h2>
       <p class="hint">Android/Chrome: меню ⋮ → «Установить приложение». iPhone: «Поделиться» → «На экран “Домой”».</p>
       <button id="btnInstall" class="btn primary" hidden>Установить приложение</button>
@@ -203,8 +254,8 @@
 </main>
 
 <nav class="tabbar">
-  <button data-tab="add" class="tab active">➕<span>Добавить</span></button>
-  <button data-tab="tx" class="tab">🧾<span>Операции</span></button>
+  <button data-tab="shop" class="tab active">🛒<span>Купи</span></button>
+  <button data-tab="money" class="tab">💸<span>Учёт</span></button>
   <button data-tab="budget" class="tab">💰<span>Бюджет</span></button>
   <button data-tab="overview" class="tab">📊<span>Обзор</span></button>
   <button data-tab="deals" class="tab">🏷️<span>Акции</span></button>
@@ -213,7 +264,9 @@
 
 <div id="toast" class="toast" hidden></div>
 <script src="js/storage.js"></script>
+<script src="js/voice.js"></script>
 <script src="js/parser.js"></script>
+<script src="js/deals.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/app.js"></script>
 </body>
