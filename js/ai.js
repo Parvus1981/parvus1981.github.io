@@ -1,0 +1,78 @@
+/* Интеграция с Mistral AI (api.mistral.ai) — ключ хранится только в браузере пользователя */
+const AI = (() => {
+  const BASE = 'https://api.mistral.ai/v1/chat/completions';
+  const MODEL = 'mistral-small-latest';
+
+  async function chat(messages, temp = 0.3) {
+    const key = Storage.settings().aiKey;
+    if (!key) throw new Error('no-key');
+    const res = await fetch(BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+      body: JSON.stringify({ model: MODEL, temperature: temp, messages })
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`Mistral ${res.status}: ${txt.slice(0, 120)}`);
+    }
+    const json = await res.json();
+    return json.choices[0].message.content;
+  }
+
+  function showErr(out, e) {
+    out.classList.remove('thinking');
+    out.textContent = e.message === 'no-key'
+      ? '⚠️ Добавьте бесплатный AI-ключ в разделе «Ещё» (console.mistral.ai) — и советы заработают.'
+      : `⚠️ ${e.message}`;
+  }
+
+  /* Умная правка черновика: AI нормализует названия, категории и суммы */
+  async function fixDraft(items, currency) {
+    const sys = `Ты — помощник семейного бюджета. Пользователь вводит покупки с чеков/голосом.
+Верни STRICT JSON: {"items":[{"name":"короткое чистое название","qty":число,"price":цена за единицу ${currency},"cat":"id категории"}]}
+Категории: ${CATS.map(c => `${c.id}=${c.name}`).join(', ')}.
+Исправь ошибки распознавания, убери мусор. Не выдумывай позиции — только уточняй введённое.`;
+    const raw = await chat([
+      { role: 'system', content: sys },
+      { role: 'user', content: JSON.stringify(items) }
+    ]);
+    const match = raw.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(match ? match[0] : raw);
+    return parsed.items || [];
+  }
+
+  /* Совет по бюджету на основе месяцев трат */
+  async function advice(summary, currency) {
+    const raw = await chat([
+      { role: 'system', content: `Ты — дружелюбный семейный финансовый советник. Отвечай на русском, кратко (до 6 пунктов), с эмодзи, конкретно: где можно сэкономить, что заметил в тратах. Данные в ${currency}.` },
+      { role: 'user', content: JSON.stringify(summary) }
+    ], 0.6);
+    return raw;
+  }
+
+  /* Подбор выгодных покупок из вставленного списка акций */
+  async function pickDeals(dealsText, recentItems, budgetInfo, currency) {
+    const raw = await chat([
+      { role: 'system', content: `Ты — помощник для экономии в супермаркетах. Пользователь вставил список акций. Учитывая его недавние покупки и лимиты бюджета, выбери самые выгодные для семьи предложения, отметь что стоит закупить впрок, а что маркетинговая ловушка. Отвечай на русском, кратко, с эмодзи, до 8 пунктов. Цены в ${currency}.` },
+      { role: 'user', content: `АКЦИИ:\n${dealsText.slice(0, 4000)}\n\nНЕДАВНИЕ ПОКУПКИ: ${JSON.stringify(recentItems.slice(0, 40))}\n\nБЮДЖЕТ: ${JSON.stringify(budgetInfo)}` }
+    ], 0.5);
+    return raw;
+  }
+
+  /* Уборка OCR-текста чека в позиции */
+  async function parseReceipt(text, currency) {
+    const sys = `Ты парсишь текст, распознанный OCR с кассового чека. Верни STRICT JSON:
+{"items":[{"name":"название товара коротко","qty":число,"price":цена позиции ${currency},"cat":"id"}]}
+Категории: ${CATS.map(c => `${c.id}=${c.name}`).join(', ')}.
+Итоги, сдачу, change и строки SUMME/ИТОГО/TOTAL как item НЕ включай — только купленные товары.`;
+    const raw = await chat([
+      { role: 'system', content: sys },
+      { role: 'user', content: text.slice(0, 2500) }
+    ]);
+    const match = raw.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(match ? match[0] : raw);
+    return parsed.items || [];
+  }
+
+  return { fixDraft, advice, pickDeals, parseReceipt, showErr };
+})();

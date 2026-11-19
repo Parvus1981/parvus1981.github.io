@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#10b981">
+<title>Семейный бухгалтер</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js" defer></script>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand">
+    <img src="icons/icon-192.png" alt="" width="28" height="28">
+    <h1>Семейный бухгалтер</h1>
+  </div>
+  <div class="month-nav">
+    <button id="prevMonth" class="icon-btn" aria-label="Прошлый месяц">‹</button>
+    <span id="monthLabel"></span>
+    <button id="nextMonth" class="icon-btn" aria-label="Следующий месяц">›</button>
+  </div>
+</header>
+
+<main id="screens">
+
+  <!-- ===== ADD ===== -->
+  <section class="screen active" id="screen-add">
+    <div class="card">
+      <h2>Добавить расход</h2>
+      <div class="add-buttons">
+        <button id="btnVoice" class="big-btn voice">🎤 <span>Голосом</span></button>
+        <label class="big-btn photo">📷 <span>Фото чека</span>
+          <input type="file" id="photoInput" accept="image/*" capture="environment" hidden>
+        </label>
+        <button id="btnManual" class="big-btn manual">⌨️ <span>Вручную</span></button>
+      </div>
+      <div id="voiceStatus" class="voice-status" hidden>
+        <span class="pulse">🎙️</span> Говорите… (например: «молоко 1.29, хлеб 2.4»)
+      </div>
+
+      <div id="manualArea" hidden>
+        <textarea id="manualInput" rows="3" placeholder="Например: молоко 1.29; хлеб 2.40; проезд 2 ребёнок"></textarea>
+        <button id="btnParseText" class="btn">Распознать →</button>
+      </div>
+
+      <div id="ocrProgress" class="ocr-progress" hidden>
+        <div class="spinner"></div> Распознаю чек… <span id="ocrStatus"></span>
+      </div>
+      <img id="receiptPreview" class="receipt-preview" hidden alt="чек">
+
+      <div id="draftArea" hidden>
+        <h3>Черновик (<span id="draftTotal">0</span>) — проверьте и сохраните</h3>
+        <div id="draftItems"></div>
+        <div class="draft-row">
+          <label>Категория по умолчанию</label>
+          <select id="draftCat"></select>
+        </div>
+        <div class="draft-row">
+          <label>Дата</label>
+          <input type="date" id="draftDate">
+        </div>
+        <div class="draft-actions">
+          <button id="btnAiFix" class="btn subtle">🤖 Умная правка (AI)</button>
+          <button id="btnSaveDraft" class="btn primary">💾 Сохранить</button>
+          <button id="btnDiscard" class="btn subtle">Отмена</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== TRANSACTIONS ===== -->
+  <section class="screen" id="screen-tx">
+    <div class="card">
+      <h2>Операции</h2>
+      <div class="filter-row">
+        <select id="filterCat"><option value="">Все категории</option></select>
+        <span id="txMonthSum" class="sum-label"></span>
+      </div>
+      <div id="txList"></div>
+      <div id="txEmpty" class="empty" hidden>Пока пусто. Добавьте первую покупку! 🎤📷</div>
+    </div>
+  </section>
+
+  <!-- ===== BUDGET ===== -->
+  <section class="screen" id="screen-budget">
+    <div class="card">
+      <h2>Бюджет на месяц <span id="budgetMonth"></span></h2>
+      <div id="budgetList"></div>
+      <button id="btnSaveBudget" class="btn primary">Сохранить лимиты</button>
+    </div>
+    <div class="card">
+      <h2>🎯 Цели накопления</h2>
+      <div id="goalsList"></div>
+      <div class="goal-form">
+        <input type="text" id="goalName" placeholder="Цель (например: отпуск)">
+        <input type="number" id="goalAmount" placeholder="Сумма" min="1" step="any">
+        <button id="btnAddGoal" class="btn">➕</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== OVERVIEW ===== -->
+  <section class="screen" id="screen-overview">
+    <div class="stat-grid">
+      <div class="stat"><span class="stat-value" id="statMonth"></span><span class="stat-label">траты за месяц</span></div>
+      <div class="stat"><span class="stat-value" id="statDay"></span><span class="stat-label">в среднем за день</span></div>
+      <div class="stat"><span class="stat-value" id="statCount"></span><span class="stat-label">покупок</span></div>
+    </div>
+    <div class="card">
+      <h2>По категориям</h2>
+      <canvas id="donutChart" height="240"></canvas>
+    </div>
+    <div class="card">
+      <h2>Последние 6 месяцев</h2>
+      <canvas id="barChart" height="200"></canvas>
+    </div>
+    <div class="card">
+      <h2>🤖 AI-советник</h2>
+      <button id="btnAdvice" class="btn primary">Спросить совет по бюджету</button>
+      <div id="adviceOut" class="ai-out"></div>
+    </div>
+  </section>
+
+  <!-- ===== DEALS ===== -->
+  <section class="screen" id="screen-deals">
+    <div class="card">
+      <h2>🏷️ Супермаркеты и акции</h2>
+      <p class="hint">Откройте актуальные акции магазина, нажмите «Поделиться»/скопируйте список — и вставьте его сюда. AI подберёт лучшее под ваш бюджет и привычки.</p>
+      <div id="marketsList"></div>
+      <details class="add-market">
+        <summary>➕ Добавить свой магазин</summary>
+        <div class="goal-form">
+          <input type="text" id="mkName" placeholder="Название (Lidl)">
+          <input type="url" id="mkUrl" placeholder="https://…/angebote">
+          <button id="btnAddMarket" class="btn">➕</button>
+        </div>
+      </details>
+    </div>
+    <div class="card">
+      <h2>🤖 AI-подбор выгодных покупок</h2>
+      <textarea id="dealsInput" rows="6" placeholder="Вставьте сюда список акций, скопированный со страницы магазина, например:
+Молоко 3,5% — 0.99 € (было 1.29)
+Курица целая — 4.49 €
+Шоколад Ritter Sport — 0.79"></textarea>
+      <button id="btnAiDeals" class="btn primary">Подобрать выгоды (AI)</button>
+      <div id="dealsOut" class="ai-out"></div>
+    </div>
+  </section>
+
+  <!-- ===== SETTINGS ===== -->
+  <section class="screen" id="screen-settings">
+    <div class="card">
+      <h2>⚙️ Настройки</h2>
+      <div class="draft-row"><label>Валюта</label>
+        <select id="setCurrency">
+          <option value="€">€ евро</option><option value="₴">₴ грн</option>
+          <option value="$">$ доллар</option><option value="₽">₽ рубль</option><option value="CHF ">CHF франк</option>
+        </select>
+      </div>
+      <div class="draft-row"><label>Язык голоса</label>
+        <select id="setVoiceLang">
+          <option value="de-DE">Deutsch</option><option value="ru-RU">Русский</option>
+          <option value="uk-UA">Українська</option><option value="en-US">English</option>
+        </select>
+      </div>
+      <div class="draft-row"><label>Язык OCR чеков</label>
+        <select id="setOcrLang">
+          <option value="deu+rus+eng">Немецкий + русский + англ</option>
+          <option value="rus+eng">Русский + англ</option>
+          <option value="ukr+eng">Українська + англ</option>
+          <option value="eng">English only</option>
+        </select>
+      </div>
+    </div>
+    <div class="card">
+      <h2>🤖 AI-ключ (Mistral)</h2>
+      <p class="hint">Получите бесплатный ключ на <a href="https://console.mistral.ai" target="_blank" rel="noopener">console.mistral.ai</a>. Ключ хранится только в вашем браузере.</p>
+      <input type="password" id="setAiKey" placeholder="API-ключ Mistral" autocomplete="off">
+      <button id="btnSaveSettings" class="btn primary">Сохранить настройки</button>
+    </div>
+    <div class="card">
+      <h2>📦 Данные</h2>
+      <div class="draft-actions">
+        <button id="btnExport" class="btn">⬇️ Экспорт (файл)</button>
+        <label class="btn">⬆️ Импорт<input type="file" id="importFile" accept=".json" hidden></label>
+        <button id="btnWipe" class="btn danger">🗑 Удалить всё</button>
+      </div>
+      <p class="hint">Экспорт/импорт — способ перенести бюджет между членами семьи или устройства.</p>
+    </div>
+    <div class="card install-card" id="installCard">
+      <h2>📲 Установить на телефон</h2>
+      <p class="hint">Android/Chrome: меню ⋮ → «Установить приложение». iPhone: «Поделиться» → «На экран “Домой”».</p>
+      <button id="btnInstall" class="btn primary" hidden>Установить приложение</button>
+    </div>
+  </section>
+</main>
+
+<nav class="tabbar">
+  <button data-tab="add" class="tab active">➕<span>Добавить</span></button>
+  <button data-tab="tx" class="tab">🧾<span>Операции</span></button>
+  <button data-tab="budget" class="tab">💰<span>Бюджет</span></button>
+  <button data-tab="overview" class="tab">📊<span>Обзор</span></button>
+  <button data-tab="deals" class="tab">🏷️<span>Акции</span></button>
+  <button data-tab="settings" class="tab">⚙️<span>Ещё</span></button>
+</nav>
+
+<div id="toast" class="toast" hidden></div>
+<script src="js/storage.js"></script>
+<script src="js/parser.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
