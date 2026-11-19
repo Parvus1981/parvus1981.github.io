@@ -333,22 +333,55 @@
     const file = e.target.files[0];
     if (!file) return;
     e.target.value = '';
+    if (state.ocrBusy) return toast('Ещё распознаю предыдущий чек…');
+    state.ocrBusy = true;
     state.source = 'photo';
     $('receiptPreview').src = URL.createObjectURL(file);
     $('receiptPreview').hidden = false;
     $('ocrProgress').hidden = false;
+    $('ocrStatus').textContent = 'готовлю фото…';
     if (typeof Tesseract === 'undefined') {
+      state.ocrBusy = false;
       $('ocrProgress').hidden = true;
       return toast('OCR ещё грузится, попробуйте снова');
     }
+    let watchdog = setTimeout(() => {
+      $('ocrProgress').hidden = true;
+      $('ocrStatus').textContent = '';
+      state.ocrBusy = false;
+      toast('⏱ Распознавание слишком долго — сфотографируйте чек ближе и при свете');
+    }, 120000);
     try {
-      const res = await Tesseract.recognize(file, Storage.settings().ocrLang, {
-        logger: m => { if (m.status === 'recognizing text' && m.progress) $('ocrStatus').textContent = `${Math.round(m.progress * 100)}%`; }
+      const small = await downscale(file, 1600);
+      const res = await Tesseract.recognize(small, Storage.settings().ocrLang, {
+        logger: m => {
+          if (m.status === 'loading language traineddata' || m.status === 'loading tesseract core') $('ocrStatus').textContent = 'загружаю язык распознавания…';
+          else if (m.status === 'recognizing text' && m.progress) $('ocrStatus').textContent = `${Math.round(m.progress * 100)}%`;
+        }
       });
       await ingestReceipt(res.data.text || '');
     } catch (err) { console.error(err); toast('Не удалось распознать чек'); }
-    finally { $('ocrProgress').hidden = true; $('ocrStatus').textContent = ''; }
+    finally { clearTimeout(watchdog); state.ocrBusy = false; $('ocrProgress').hidden = true; $('ocrStatus').textContent = ''; }
   });
+
+  function downscale(file, maxSide) {
+    return new Promise(resolve => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        if (scale >= 1) { URL.revokeObjectURL(url); return resolve(file); }
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * scale);
+        c.height = Math.round(img.height * scale);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        resolve(c.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
 
   async function ingestReceipt(text) {
     if (!text.trim()) return toast('Текст чека пуст — снимите ближе и чётче');
@@ -359,12 +392,17 @@
         if (items.length) { makeDraft(items); return; }
       } catch (err) { console.warn(err); }
     }
+    const JUNK = /summe|zwischens|\bsum\b|total|итог|\bbar\b|karte|wechsel|wec?hselgeld|zahlung|zu\s*zah|\bzal\b|\bzu\b|zahlweg|pfand|leergut|mwst|\bust\b|vat|nett|brutt|kasse|filiale|datum|uhrzeit|bediener|\bbon\b|artikel|rabbat|coupon|gutschein|gutschrift|storno|girocard|contactless|edv|ungef|hauptkasse|bitte|\btse\b|\bzzv\b/i;
     const lines = text.split('\n').map(l => l.trim())
-      .filter(l => l && !/summe|total|итог|bar|karte|change|wec?hselgeld|zwischensumme|mwst|ust|vat|edv|ungef/i.test(l));
+      .filter(l => l.length >= 4 && /[a-zäöüßа-яё]{2,}/i.test(l) && !JUNK.test(l));
     const items = [];
     for (const line of lines) {
       const it = parseChunk(line.replace(/\s{3,}/g, ' ').replace(/^[xX*]\s*/, ''));
-      if (it && it.price > 0 && it.name.length > 1) items.push(it);
+      if (!it) continue;
+      const letters = (it.name || '').replace(/[^\p{L}]/gu, '');
+      const nameOk = letters.length >= 3 && !(it.name === it.name.toUpperCase() && letters.length <= 6);
+      const priceOk = it.price > 0 && (/\d[.,]\d{1,2}(\s|$)/.test(line) || it.price >= 20) && it.price <= 500;
+      if (nameOk && priceOk) items.push(it);
     }
     if (!items.length) return toast('Позиции не найдены — введите вручную или добавьте AI-ключ');
     makeDraft(items);
