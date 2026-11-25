@@ -1,19 +1,15 @@
 /* Хранилище данных в localStorage — всё остаётся на устройстве пользователя */
 const Storage = (() => {
   const KEY = 'family-budget-v2';
+  // Только магазины, реально существующие в Райне-Мезуме (48432):
+  // K+K (Mesum-Rheiner Str. 46), Netto (Dille 38), Lidl (Dechant-Römer-Str. 19),
+  // ALDI Nord (Dille 57), EDEKA Borgmann (Alte Bahnhofstr. 30-32)
   const DEFAULT_STORES = [
-    { name: 'K+K Klaas & Kock', url: 'https://www.klaas-und-kock.de/', color: '#c8102e', dist: null, key: 'klaas-kock' },
-    { name: 'Lidl', url: 'https://www.lidl.de/l/aktuelle-prospekte', color: '#0050aa', dist: null, key: 'lidl' },
-    { name: 'Netto Marken-Discount', url: 'https://www.marktguru.de/r/netto-marken-discount', color: '#ffcc00', dist: null, key: 'netto-marken-discount' },
-    { name: 'REWE', url: 'https://www.marktguru.de/r/rewe', color: '#cc071e', dist: null, key: 'rewe' },
-    { name: 'Combi', url: 'https://www.combi.de/angebote', color: '#e30613', dist: null, key: 'combi' },
-    { name: 'Kaufland', url: 'https://filiale.kaufland.de/angebote/uebersicht.html', color: '#e10914', dist: null, key: 'kaufland' },
-    { name: 'PENNY', url: 'https://www.penny.de/', color: '#d81e05', dist: null, key: 'penny' },
-    { name: 'Getränke Hoffmann', url: 'https://www.getraenke-hoffmann.de/', color: '#0e2c66', dist: null, key: 'getraenke-hoffmann' },
-    { name: 'EDEKA', url: 'https://www.edeka.de/', color: '#001e50', dist: null, key: 'edeka' },
-    { name: 'ALDI Nord', url: 'https://www.aldi-nord.de/angebote.html', color: '#0a2896', dist: null, key: 'aldi-nord' },
-    { name: 'dm', url: 'https://www.dm.de/aktuelle-prospekte/', color: '#002878', dist: null, key: 'dm-drogerie-markt' },
-    { name: 'Rossmann', url: 'https://www.rossmann.de/de/aktuelle-handzettel', color: '#c3002d', dist: null, key: 'rossmann' }
+    { name: 'K+K Klaas & Kock', url: 'https://www.klaas-und-kock.de/', color: '#c8102e', dist: null, key: 'klaas-kock', addr: 'Mesum-Rheiner Str. 46' },
+    { name: 'Netto Marken-Discount', url: 'https://www.marktguru.de/r/netto-marken-discount', color: '#ffcc00', dist: null, key: 'netto-marken-discount', addr: 'Dille 38' },
+    { name: 'Lidl', url: 'https://www.lidl.de/l/aktuelle-prospekte', color: '#0050aa', dist: null, key: 'lidl', addr: 'Dechant-Römer-Str. 19' },
+    { name: 'ALDI Nord', url: 'https://www.aldi-nord.de/angebote.html', color: '#0a2896', dist: null, key: 'aldi-nord', addr: 'Dille 57' },
+    { name: 'EDEKA Borgmann', url: 'https://www.edeka.de/', color: '#001e50', dist: null, key: 'edeka', addr: 'Alte Bahnhofstr. 30-32' }
   ];
 
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -26,8 +22,8 @@ const Storage = (() => {
         ocrLang: 'deu+rus+eng',
         aiKey: '',
         stores: DEFAULT_STORES,
-        zip: '48431',
-        city: 'Rheine'
+        zip: '48432',
+        city: 'Mesum'
       },
       txs: [],
       budgets: {},
@@ -54,8 +50,13 @@ const Storage = (() => {
       merged.settings.stores = merged.settings.stores.map(s => {
         if (s.key && aliases[s.key]) s = { ...s, key: aliases[s.key], name: aliases[s.key] === 'aldi-nord' ? 'ALDI Nord' : 'dm' };
         const def = s.key && base.settings.stores.find(d => d.key === s.key);
-        return def ? { ...def, dist: s.dist != null ? s.dist : null } : s;
+        return def ? { ...def, addr: def.addr, dist: s.dist != null ? s.dist : null } : s;
       });
+      // если список магазинов — нетронутый старый набор по умолчанию (12 сетей) —
+      // заменяем на реальный набор Мезума, выдуманные магазины мешают
+      const OLD_DEFAULT_KEYS = ['klaas-kock','lidl','netto-marken-discount','rewe','combi','kaufland','penny','getraenke-hoffmann','edeka','aldi-nord','dm-drogerie-markt','rossmann'].sort().join(',');
+      const curKeys = merged.settings.stores.map(s => s.key || '').sort().join(',');
+      if (curKeys === OLD_DEFAULT_KEYS) merged.settings.stores = base.settings.stores.map(s => ({ ...s }));
       return merged;
     } catch (e) {
       console.error('load error', e);

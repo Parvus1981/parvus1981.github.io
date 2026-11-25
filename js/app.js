@@ -190,8 +190,9 @@
       card.querySelector('.cmp-found').textContent = '⚠️ Не удалось загрузить акции: ' + e.message;
       return;
     }
-    const offers = data.offers || [];
-    state.compare = { data, basket };
+    const myKeys = new Set(Storage.stores().map(s => s.key));
+    const offers = (data.offers || []).filter(o => (o.s || []).some(x => myKeys.has(x.u)));
+    state.compare = { data, basket, offers };
 
     let html = '';
     let found = 0;
@@ -336,7 +337,7 @@
     for (const b of active.concat(doneItems)) {
       let price = 0;
       if (state.compare) {
-        const offs = Deals.findFor(b.name, state.compare.data.offers, 1);
+        const offs = Deals.findFor(b.name, state.compare.offers, 1);
         if (offs.length) price = offs[0].p;
       }
       total += price * (b.qty || 1);
@@ -744,7 +745,8 @@
       $('dealsFresh').textContent = `${data.count} акций`;
       const upd = new Date(data.updated).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
       $('dealsFreshness').textContent = `Собрано автоматически ${upd} для zip ${data.zip}. Обновление каждый день ≈06:30 (GitHub Actions). Список товаров: config/terms.txt в репозитории.`;
-      renderDealGrid(Deals.topDeals(data.offers, 24));
+      const mk = new Set(Storage.stores().map(s => s.key));
+      renderDealGrid(Deals.topDeals(data.offers.filter(o => (o.s || []).some(x => mk.has(x.u))), 24));
     } catch (e) {
       $('dealsFresh').textContent = 'офлайн';
       $('dealsFreshness').textContent = 'Не удалось загрузить акции — проверьте интернет.';
@@ -783,7 +785,9 @@
     const data = await Deals.load();
     const qn = Deals.expandQuery(q);
     const terms = qn.split(' ').filter(w => w.length > 2).map(w => w.slice(0, 5));
+    const mk = new Set(Storage.stores().map(s => s.key));
     const list = data.offers.filter(o => {
+      if (!(o.s || []).some(x => mk.has(x.u))) return false;
       const hay = Deals.expandQuery([o.n, o.b, o.d].filter(Boolean).join(' '));
       return terms.some(w => hay.includes(w));
     }).slice(0, 30);
@@ -866,7 +870,7 @@
       const row = document.createElement('div');
       row.className = 'store-edit-row';
       row.innerHTML = `
-        <input type="text" value="${esc(s.name)}" data-i="${i}" data-f="name">
+        <input type="text" value="${esc(s.name)}" data-i="${i}" data-f="name" title="${esc(s.addr || '')}">
         <span class="kmwrap">🚗 <input type="number" min="0" step="0.1" value="${s.dist ?? ''}" data-i="${i}" data-f="dist"> км</span>
         <button class="rm" title="удалить">✕</button>`;
       row.querySelector('.rm').addEventListener('click', () => {
