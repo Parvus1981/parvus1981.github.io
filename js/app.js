@@ -196,9 +196,11 @@
     let html = '';
     let found = 0;
     const missed = [];
+    const perItem = [];
     for (const item of basket) {
       const offs = Deals.findFor(item.name, offers, 4);
       if (!offs.length) { missed.push(item.name); continue; }
+      perItem.push({ name: item.name, qty: item.qty, offs });
       found++;
       const best = offs[0];
       html += `<div class="cmp-item">
@@ -256,9 +258,69 @@
       </div>`;
     }
 
+    // Матрица: вся корзина × все магазины, реальные цены из буклетов
+    let matrix = '';
+    if (perItem.length) {
+      const storeKeys = [];
+      const cellMap = {}; // key: item idx + store key -> offer (лучшая цена этой позиции в этом магазине)
+      perItem.forEach((p, pi) => {
+        const byStore = {};
+        p.offs.forEach(o => {
+          const k = o.s?.[0]?.u;
+          if (!k) return;
+          if (!byStore[k] || o.p < byStore[k].p) byStore[k] = o;
+        });
+        Object.entries(byStore).forEach(([k, o]) => {
+          if (!storeKeys.includes(k)) storeKeys.push(k);
+          cellMap[pi + '|' + k] = o;
+        });
+      });
+      // магазины с покрытием сначала, потом по алфавиту
+      const defOrder = Storage.stores().map(s => s.key);
+      storeKeys.sort((a, b) => {
+        const ca = perItem.filter((_, pi) => cellMap[pi + '|' + a]).length;
+        const cb = perItem.filter((_, pi) => cellMap[pi + '|' + b]).length;
+        return cb - ca || (defOrder.indexOf(a) + 99) - (defOrder.indexOf(b) + 99);
+      });
+      const minPrice = {};
+      perItem.forEach((p, pi) => {
+        minPrice[pi] = Math.min(...storeKeys.filter(k => cellMap[pi + '|' + k]).map(k => cellMap[pi + '|' + k].p));
+      });
+      matrix = '<div class="card-head" style="margin-top:14px"><h2>📋 Вся корзина по магазинам</h2></div><div class="matrix-wrap"><table class="matrix"><tr><th></th>';
+      storeKeys.forEach(k => {
+        const st = Storage.storeByKey(k);
+        matrix += `<th>${esc(st && st.name ? st.name : k)}</th>`;
+      });
+      matrix += '</tr>';
+      perItem.forEach((p, pi) => {
+        matrix += `<tr><td class="m-name">${esc(p.name)}${p.qty > 1 ? ` ×${p.qty}` : ''}</td>`;
+        storeKeys.forEach(k => {
+          const o = cellMap[pi + '|' + k];
+          if (!o) { matrix += '<td class="m-none">·</td>'; return; }
+          const d = Deals.discountPct(o);
+          const bestCls = o.p <= minPrice[pi] ? ' class="m-best"' : '';
+          matrix += `<td${bestCls}>${fmt(o.p)}${d ? `<span class="m-tag">−${d}%</span>` : ''}</td>`;
+        });
+        matrix += '</tr>';
+      });
+      // итог по каждому магазину (полная корзина по его акциям)
+      matrix += '<tr class="m-total"><td class="m-name">Итого:</td>';
+      storeKeys.forEach(k => {
+        let covered = 0;
+        const sum = perItem.reduce((acc, p, pi) => {
+          const o = cellMap[pi + '|' + k];
+          if (!o) return acc;
+          covered++;
+          return acc + o.p * (p.qty || 1);
+        }, 0);
+        matrix += covered ? `<td>${fmt(sum)}<span class="m-sub">${covered}/${perItem.length}</span></td>` : '<td class="m-none">·</td>';
+      });
+      matrix += '</tr></table></div>';
+    }
+
     card.innerHTML = `
       <div class="cmp-found">Найдено в акциях: <b>${found}</b> из ${basket.length}${missed.length ? ` · нет акций на: ${esc(missed.join(', '))} <span class="hint-muted">(товара просто нет в акциях этой недели — каталог обновляется раз в день)</span>` : ''}${data.updated ? ` · данные от ${new Date(data.updated).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}</div>
-      ${html}${totHtml}`;
+      ${matrix}${totHtml}${html}`;
 
     const tb = $('btnToBudget');
     if (tb) tb.addEventListener('click', basketToBudget);

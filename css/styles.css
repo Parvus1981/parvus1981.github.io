@@ -384,3 +384,22 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--g
 a.store-tot { text-decoration: none; color: inherit; display: flex; justify-content: space-between; }
 .apps-links { display: flex; flex-direction: column; gap: 8px; }
 .apps-links a { display: block; padding: 10px 12px; border-radius: 12px; background: var(--green-soft); color: var(--green-dark); text-decoration: none; font-weight: 600; font-size: 14px; }
+
+/* v2.13: матрица корзина × магазины */
+.matrix-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 6px 0 4px; }
+table.matrix { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 420px; }
+.matrix th { font-size: 11px; font-weight: 700; color: var(--text-soft, #8a8f98); padding: 6px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid rgba(0,0,0,.08); }
+.matrix th:first-child { text-align: left; }
+.matrix td { padding: 7px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid rgba(0,0,0,.05); font-variant-numeric: tabular-nums; }
+.matrix td.m-name { text-align: left; font-weight: 600; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+.matrix td.m-none { color: rgba(0,0,0,.25); }
+.matrix td.m-best { font-weight: 800; color: var(--green-dark); background: var(--green-soft); border-radius: 8px; }
+.matrix .m-tag { display: block; font-size: 10px; color: #e5484d; font-weight: 700; }
+.matrix .m-total td { border-top: 2px solid rgba(0,0,0,.12); font-weight: 800; padding-top: 9px; }
+.matrix .m-sub { display: block; font-size: 10px; font-weight: 600; color: var(--text-soft, #8a8f98); }
+@media (prefers-color-scheme: dark) {
+  .matrix th { border-bottom-color: rgba(255,255,255,.12); }
+  .matrix td { border-bottom-color: rgba(255,255,255,.06); }
+  .matrix td.m-none { color: rgba(255,255,255,.25); }
+  .matrix .m-total td { border-top-color: rgba(255,255,255,.15); }
+}
