@@ -778,6 +778,21 @@
     renderMonthLabel();
     toast('Настройки сохранены ✓');
   });
+  $('btnTestKey').addEventListener('click', async () => {
+    const k = $('setAiKey').value.trim();
+    if (k) Storage.updateSettings({ aiKey: k });
+    const btn = $('btnTestKey');
+    btn.disabled = true;
+    btn.textContent = '⏳ Проверяю…';
+    try {
+      const ans = await AI.testKey();
+      btn.textContent = '✅ Ключ работает' + (ans ? ` — «${ans}»` : '');
+      toast('AI подключён ✓');
+    } catch (e) {
+      btn.textContent = '❌ ' + (e.message === 'no-key' ? 'Сначала вставьте ключ и сохраните' : e.message.slice(0, 60));
+    }
+    setTimeout(() => { btn.disabled = false; btn.textContent = '🔎 Проверить ключ'; }, 4000);
+  });
 
   function renderStoreEdit() {
     const wrap = $('storeEdit');

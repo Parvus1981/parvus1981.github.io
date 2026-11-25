@@ -74,5 +74,11 @@ const AI = (() => {
     return parsed.items || [];
   }
 
-  return { fixDraft, advice, pickDeals, parseReceipt, showErr };
+  // проверка API-ключа: реальный минимальный запрос один раз
+  async function testKey() {
+    const raw = await chat([{ role: 'user', content: 'Ответь ровно одно слово: OK' }], 0);
+    return (raw || '').trim().slice(0, 40);
+  }
+
+  return { fixDraft, advice, pickDeals, parseReceipt, testKey, showErr };
 })();
