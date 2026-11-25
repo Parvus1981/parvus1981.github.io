@@ -1,7 +1,7 @@
-const CACHE = 'family-budget-v2-15';
+const CACHE = 'family-budget-v2-16';
 const SHELL = [
   './', './index.html', './css/styles.css',
-  './js/storage.js', './js/parser.js', './js/deals.js', './js/voice.js', './js/ai.js', './js/app.js',
+  './js/storage.js', './js/parser.js', './js/deals.js', './js/voice.js', './js/ai.js', './js/sync.js', './js/app.js',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png',
   './icons/maskable-512.png'
 ];

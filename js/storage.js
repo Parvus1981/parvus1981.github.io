@@ -1,6 +1,7 @@
 /* Хранилище данных в localStorage — всё остаётся на устройстве пользователя */
 const Storage = (() => {
   const KEY = 'family-budget-v2';
+  const acked = new Set();
   // Только магазины, реально существующие в Райне-Мезуме (48432):
   // K+K (Mesum-Rheiner Str. 46), Netto (Dille 38), Lidl (Dechant-Römer-Str. 19),
   // ALDI Nord (Dille 57), EDEKA Borgmann (Alte Bahnhofstr. 30-32)
@@ -32,6 +33,15 @@ const Storage = (() => {
       goals: [],
       basket: []
     };
+  }
+
+  /* журнал удалений (для семейной синхронизации, чтобы удалённое не воскресало) */
+  const DELLOG = KEY + '-dellog';
+  let dellog = (() => { try { return JSON.parse(localStorage.getItem(DELLOG) || '[]'); } catch (e) { return []; } })();
+  function logDel(ids) {
+    for (const id of ids) dellog.push({ id, at: new Date().toISOString() });
+    dellog = dellog.slice(-100);
+    localStorage.setItem(DELLOG, JSON.stringify(dellog));
   }
 
   let data = load();
@@ -118,16 +128,29 @@ const Storage = (() => {
     addToBasket(item) {
       const norm = item.name.trim().toLowerCase();
       const same = data.basket.find(b => b.name.trim().toLowerCase() === norm);
+      if (item.id) { // пришло из семейной комнаты — не дедуплицируем по имени, храним свой id
+        const ex = data.basket.find(b => b.id === item.id);
+        if (ex) { Object.assign(ex, { name: item.name, qty: item.qty || 1, done: !!item.done, at: item.at || ex.at }); save(); }
+        else { data.basket.push({ id: item.id, name: item.name, qty: item.qty || 1, done: !!item.done, at: item.at || null }); save(); }
+        return;
+      }
       if (same) same.qty += item.qty || 1;
       else data.basket.push({ id: uid(), name: item.name, qty: item.qty || 1, done: false });
       save();
     },
     updateBasket(id, patch) {
       const b = data.basket.find(x => x.id === id);
-      if (b) { Object.assign(b, patch); save(); }
+      if (b) { Object.assign(b, patch, { at: new Date().toISOString() }); save(); }
     },
-    delFromBasket(id) { data.basket = data.basket.filter(b => b.id !== id); save(); },
-    clearCheckedBasket() { data.basket = data.basket.filter(b => !b.done); save(); },
+    delFromBasket(id) { data.basket = data.basket.filter(b => b.id !== id); logDel([id]); save(); },
+    clearCheckedBasket() {
+      const gone = data.basket.filter(b => b.done).map(b => b.id);
+      data.basket = data.basket.filter(b => !b.done);
+      if (gone.length) logDel(gone);
+      save();
+    },
+    pendingDel: () => dellog.filter(d => !acked.has(d.id)),
+    ackDel(ids) { ids.forEach(id => acked.add(id)); },
 
     updateSettings(patch) { data.settings = { ...data.settings, ...patch }; save(); },
     stores: () => data.settings.stores,

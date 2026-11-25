@@ -64,6 +64,22 @@
     </div>
 
     <div id="compareOut"></div>
+
+    <div class="card" id="familyCard" hidden>
+      <div class="card-head">
+        <h2>👬 Семья — общий список и чат</h2>
+        <span id="fmStatus" class="sub">отключено</span>
+      </div>
+      <div id="fmMsgs" class="fm-msgs"></div>
+      <div class="quick-add" style="margin-top:8px">
+        <input type="text" id="fmItem" placeholder="что докупить? (появится у всех)">
+        <button id="btnFmItem" class="btn round" title="в общий список">➕</button>
+      </div>
+      <div class="quick-add">
+        <input type="text" id="fmMsg" placeholder="написать сообщение семье…">
+        <button id="btnFmSend" class="btn round" title="отправить">➡️</button>
+      </div>
+    </div>
   </section>
 
   <!-- ===== MONEY (учёт) ===== -->
@@ -248,6 +264,19 @@ Hackbraten — 3.99"></textarea>
     </div>
 
     <div class="card">
+      <h2>👬 Семейная синхронизация</h2>
+      <p class="hint">Общий список покупок + чат между планшетом и телефонами. Без серверов: обмен идёт через секретный Gist от вашего GitHub. Токен хранится только в браузере.</p>
+      <div class="draft-row"><label>Моё имя в семье</label><input type="text" id="setFamilyName" placeholder="например: Павел"></div>
+      <div class="draft-row"><label>GitHub-токен (право: Gists)</label><input type="password" id="setFamilyToken" placeholder="github_pat_&#8230;" autocomplete="off"></div>
+      <div class="draft-row"><label>ID комнаты (gist)</label><input type="text" id="setFamilyGist" placeholder="нажмите «Создать» или вставьте с другого устройства"></div>
+      <p class="hint">✔ Токен: github.com/settings/personal-access-tokens/new → Repository access: «Public» не нужен — выберите минимальные права и в разделе Permissions → User → Gists: Read and write. Один токен и ID вставьте на всех устройствах семьи.</p>
+      <div class="draft-actions">
+        <button id="btnFmCreate" class="btn">�ﷰ Создать комнату</button>
+        <button id="btnFmSave" class="btn primary">💾 Соединить</button>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>📦 Данные</h2>
       <div class="draft-actions">
         <button id="btnExport" class="btn">⬇️ Экспорт</button>
@@ -289,6 +318,7 @@ Hackbraten — 3.99"></textarea>
 <script src="js/parser.js"></script>
 <script src="js/deals.js"></script>
 <script src="js/ai.js"></script>
+<script src="js/sync.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

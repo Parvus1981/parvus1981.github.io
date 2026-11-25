@@ -16,6 +16,20 @@
     bar: null
   };
 
+  /* --- семейная синхронизация: триггер после любых мутаций --- */
+  let _syncTmr = null;
+  function scheduleFamilySync() {
+    if (!Sync.ready()) return;
+    clearTimeout(_syncTmr);
+    _syncTmr = setTimeout(() => Sync.tick(), 1200);
+  }
+  ['addTx','delTx','addFromBasket','addToBasket','updateBasket','delFromBasket','clearCheckedBasket','setStores']
+    .forEach(fn => {
+      if (typeof Storage[fn] !== 'function') return;
+      const orig = Storage[fn].bind(Storage);
+      Storage[fn] = (...a) => { orig(...a); scheduleFamilySync(); };
+    });
+
   function toast(msg, ms = 2400) {
     const t = $('toast');
     t.textContent = msg;
@@ -835,6 +849,10 @@
     $('setAiKey').value = s.aiKey || '';
     const c = $('setCity');
     if (c) c.value = s.city || '';
+    const fn = $('setFamilyName'), ft = $('setFamilyToken'), fg = $('setFamilyGist');
+    if (fn) fn.value = s.familyName || '';
+    if (ft) ft.value = s.familyToken || '';
+    if (fg) fg.value = s.familyGistId || '';
     const pv = $('setAiProvider');
     if (pv) pv.value = s.aiProvider === 'gemini' ? 'gemini' : 'mistral';
   }
@@ -949,7 +967,74 @@
     $('btnInstall').hidden = true;
   });
 
+  /* ============ Семья: общий список + чат ============ */
+  function fmRender() {
+    if (!Sync.ready()) { if ($('familyCard')) $('familyCard').hidden = true; return; }
+    $('familyCard').hidden = false;
+    const me = Sync.cfg().me;
+    $('fmMsgs').innerHTML = Sync.chat().slice(-40).map(m => `
+      <div class="fm-msg ${m.by === me ? 'me' : ''}">
+        <span class="fm-by">${esc(m.by)} · ${new Date(m.at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>
+        ${esc(m.text)}
+      </div>`).join('');
+    $('fmMsgs').scrollTop = $('fmMsgs').scrollHeight;
+    if (Sync.lastError) { $('fmStatus').textContent = '⚠ ' + Sync.lastError.slice(0, 40); $('fmStatus').classList.remove('on'); }
+    else {
+      const t = Sync.lastSync ? Sync.lastSync.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '…';
+      $('fmStatus').textContent = 'синхронизировано · ' + t;
+      $('fmStatus').classList.add('on');
+    }
+  }
+  Sync.setOnChange(msg => {
+    if (msg && msg.by !== Sync.cfg().me) { toast('💬 ' + msg.by + ': ' + msg.text, 4200); if (navigator.vibrate) navigator.vibrate(60); }
+    fmRender();
+    if ($('screen-shop').classList.contains('active')) renderBasket();
+  });
+
+  const fmSend = async () => {
+    const v = $('fmMsg').value.trim(); if (!v || !Sync.ready()) return;
+    $('fmMsg').value = '';
+    try { await Sync.sendChat(v); fmRender(); }
+    catch (e) { toast('⚠ ' + e.message, 5000); }
+  };
+  $('btnFmSend').addEventListener('click', fmSend);
+  $('fmMsg').addEventListener('keydown', e => { if (e.key === 'Enter') fmSend(); });
+
+  $('btnFmItem').addEventListener('click', () => {
+    const v = $('fmItem').value.trim(); if (!v || !Sync.ready()) return;
+    $('fmItem').value = '';
+    addBasketFromText(v);
+    toast('🛍 добавлено в общий список', 2200);
+  });
+  $('fmItem').addEventListener('keydown', e => { if (e.key === 'Enter') $('btnFmItem').click(); });
+
+  $('btnFmCreate').addEventListener('click', async () => {
+    const tok = $('setFamilyToken').value.trim();
+    if (!tok) { toast('Сначала вставьте GitHub-токен и сохраните'); return; }
+    Storage.updateSettings({ familyToken: tok, familyName: $('setFamilyName').value.trim() });
+    const btn = $('btnFmCreate'); btn.disabled = true; const old = btn.textContent; btn.textContent = '…создаю';
+    try {
+      const id = await Sync.createRoom();
+      $('setFamilyGist').value = id;
+      Storage.updateSettings({ familyGistId: id });
+      Sync.start(); fmRender();
+      toast('✓ Комната создана. ID ниже — вставьте его вместе с токеном на других устройствах', 7000);
+    } catch (e) { toast('⚠ ' + e.message, 6000); }
+    btn.disabled = false; btn.textContent = old;
+  });
+  $('btnFmSave').addEventListener('click', () => {
+    Storage.updateSettings({
+      familyName: $('setFamilyName').value.trim(),
+      familyToken: $('setFamilyToken').value.trim(),
+      familyGistId: $('setFamilyGist').value.trim()
+    });
+    if (Sync.ready()) { Sync.start(); fmRender(); toast('Семья подключена ✓'); }
+    else toast('Нужны токен и ID комнаты');
+  });
+
   /* Старт */
   renderMonthLabel();
   renderBasket();
+  fmRender();
+  if (Sync.ready()) Sync.start();
 })();
