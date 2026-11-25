@@ -767,13 +767,16 @@
     $('setVoiceLang').value = s.voiceLang;
     $('setOcrLang').value = s.ocrLang;
     $('setAiKey').value = s.aiKey || '';
+    const c = $('setCity');
+    if (c) c.value = s.city || '';
   }
   $('btnSaveSettings').addEventListener('click', () => {
     Storage.updateSettings({
       currency: $('setCurrency').value,
       voiceLang: $('setVoiceLang').value,
       ocrLang: $('setOcrLang').value,
-      aiKey: $('setAiKey').value.trim()
+      aiKey: $('setAiKey').value.trim(),
+      city: ($('setCity') ? $('setCity').value.trim() : '') || 'Rheine'
     });
     renderMonthLabel();
     toast('Настройки сохранены ✓');
