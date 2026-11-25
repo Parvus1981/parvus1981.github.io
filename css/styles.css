@@ -382,3 +382,5 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--g
 .deal-card:active { transform: scale(.97); }
 .hint-muted { color: var(--text-soft, #8a8f98); font-size: 12px; }
 a.store-tot { text-decoration: none; color: inherit; display: flex; justify-content: space-between; }
+.apps-links { display: flex; flex-direction: column; gap: 8px; }
+.apps-links a { display: block; padding: 10px 12px; border-radius: 12px; background: var(--green-soft); color: var(--green-dark); text-decoration: none; font-weight: 600; font-size: 14px; }

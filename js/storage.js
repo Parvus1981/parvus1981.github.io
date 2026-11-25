@@ -4,8 +4,8 @@ const Storage = (() => {
   const DEFAULT_STORES = [
     { name: 'K+K Klaas & Kock', url: 'https://www.klaas-und-kock.de/', color: '#c8102e', dist: 1.0, key: 'klaas-kock' },
     { name: 'Lidl', url: 'https://www.lidl.de/l/aktuelle-prospekte', color: '#0050aa', dist: 1.0, key: 'lidl' },
-    { name: 'Netto Marken-Discount', url: 'https://www.netto-online.de/ueber-netto/Online-Prospekte.chtm', color: '#ffcc00', dist: 1.5, key: 'netto-marken-discount' },
-    { name: 'REWE', url: 'https://www.rewe.de/angebote/', color: '#cc071e', dist: 1.2, key: 'rewe' },
+    { name: 'Netto Marken-Discount', url: 'https://www.marktguru.de/r/netto-marken-discount', color: '#ffcc00', dist: 1.5, key: 'netto-marken-discount' },
+    { name: 'REWE', url: 'https://www.marktguru.de/r/rewe', color: '#cc071e', dist: 1.2, key: 'rewe' },
     { name: 'Combi', url: 'https://www.combi.de/angebote', color: '#e30613', dist: 1.6, key: 'combi' },
     { name: 'Kaufland', url: 'https://filiale.kaufland.de/angebote/uebersicht.html', color: '#e10914', dist: 3.0, key: 'kaufland' },
     { name: 'PENNY', url: 'https://www.penny.de/', color: '#d81e05', dist: 2.0, key: 'penny' },

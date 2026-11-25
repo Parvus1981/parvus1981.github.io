@@ -208,11 +208,12 @@
         const st = Storage.storeByKey(o.s[0]?.u);
         const dist = st && st.dist != null && st.dist !== '' ? `<span class="o-dist">🚗 ${st.dist} км</span>` : '';
         const d = Deals.discountPct(o);
+        const linkKind = o.e ? '· именно эта акция' : '· текущие акции сети';
         html += `<a class="offer-row" href="${esc(offerHref(o))}" target="_blank" rel="noopener">
           <img src="${esc(o.img)}" loading="lazy" alt="">
           <div class="o-main">
             <div class="o-title">${esc(o.n)}${o.b ? ` · ${esc(o.b)}` : ''}</div>
-            <div class="o-meta"><b>${esc(o.s[0]?.n || '')}</b> ${dist} · до ${esc((o.t || '').slice(5, 10))}</div>
+            <div class="o-meta"><b>${esc(o.s[0]?.n || '')}</b> ${dist} · до ${esc((o.t || '').slice(5, 10))} <span class="hint-muted">${linkKind} ↗</span></div>
           </div>
           <div>${d ? `<span class="o-tag" style="background:${d >= 30 ? '#e5484d' : '#f5a623'}">−${d}%</span>` : ''}
           <span class="o-price">${fmt(o.p)}</span>${o.op ? `<span class="o-old">${fmt(o.op)}</span>` : ''}<span class="o-open">↗</span></div>
