@@ -374,3 +374,10 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--g
   font-size: .62rem; gap: 3px;
 }
 .tabbar button.active { color: var(--green-dark); font-weight: 800; }
+
+/* v2.8: ссылки на офферы всегда рабочие + подсказки */
+.o-open { font-size: 14px; opacity: .45; margin-left: 4px; }
+.offer-row:active { background: rgba(0,0,0,.06); }
+.deal-card { transition: transform .12s ease; }
+.deal-card:active { transform: scale(.97); }
+.hint-muted { color: var(--text-soft, #8a8f98); font-size: 12px; }

@@ -166,6 +166,15 @@
   });
 
   /* ============ Сравнение цен ============ */
+  // Ссылка на оффер: deep-link продавца, иначе страница магазина на Marktguru (всегда открывается)
+  function offerHref(o) {
+    if (o.e) return o.e;
+    const key = o.s && o.s[0] && o.s[0].u;
+    const st = key && Storage.storeByKey(key);
+    if (st && st.key) return 'https://www.marktguru.de/r/' + st.key;
+    return key ? 'https://www.marktguru.de/r/' + key : 'https://www.marktguru.de/';
+  }
+
   $('btnCompare').addEventListener('click', async () => {
     const out = $('compareOut');
     const basket = Storage.basket().filter(b => !b.done);
@@ -199,14 +208,14 @@
         const st = Storage.storeByKey(o.s[0]?.u);
         const dist = st && st.dist != null && st.dist !== '' ? `<span class="o-dist">🚗 ${st.dist} км</span>` : '';
         const d = Deals.discountPct(o);
-        html += `<a class="offer-row" ${o.e ? `href="${esc(o.e)}" target="_blank" rel="noopener"` : ''}>
+        html += `<a class="offer-row" href="${esc(offerHref(o))}" target="_blank" rel="noopener">
           <img src="${esc(o.img)}" loading="lazy" alt="">
           <div class="o-main">
             <div class="o-title">${esc(o.n)}${o.b ? ` · ${esc(o.b)}` : ''}</div>
             <div class="o-meta"><b>${esc(o.s[0]?.n || '')}</b> ${dist} · до ${esc((o.t || '').slice(5, 10))}</div>
           </div>
           <div>${d ? `<span class="o-tag" style="background:${d >= 30 ? '#e5484d' : '#f5a623'}">−${d}%</span>` : ''}
-          <span class="o-price">${fmt(o.p)}</span>${o.op ? `<span class="o-old">${fmt(o.op)}</span>` : ''}</div>
+          <span class="o-price">${fmt(o.p)}</span>${o.op ? `<span class="o-old">${fmt(o.op)}</span>` : ''}<span class="o-open">↗</span></div>
         </a>`;
       });
       html += '</div>';
@@ -245,7 +254,7 @@
     }
 
     card.innerHTML = `
-      <div class="cmp-found">Найдено в акциях: <b>${found}</b> из ${basket.length}${missed.length ? ` · нет акций на: ${esc(missed.join(', '))}` : ''}${data.updated ? ` · данные от ${new Date(data.updated).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}</div>
+      <div class="cmp-found">Найдено в акциях: <b>${found}</b> из ${basket.length}${missed.length ? ` · нет акций на: ${esc(missed.join(', '))} <span class="hint-muted">(товара просто нет в акциях этой недели — каталог обновляется раз в день)</span>` : ''}${data.updated ? ` · данные от ${new Date(data.updated).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}</div>
       ${html}${totHtml}`;
 
     const tb = $('btnToBudget');
@@ -682,7 +691,7 @@
     const d = Deals.discountPct(o);
     const a = document.createElement('a');
     a.className = 'deal-card';
-    if (o.e) { a.href = o.e; a.target = '_blank'; a.rel = 'noopener'; }
+    a.href = offerHref(o); a.target = '_blank'; a.rel = 'noopener';
     a.innerHTML = `
       <img src="${esc(o.img)}" loading="lazy" alt="">
       <div class="dc-name">${esc(o.n)}${o.b ? ` · ${esc(o.b)}` : ''}</div>
