@@ -10,6 +10,8 @@ const Voice = (() => {
   let sessTimer = null;
   let onResult = null;
   let onState = null;
+  let recStartTs = 0;
+  let fastEnds = 0;
 
   function start(resultCb, stateCb) {
     onResult = resultCb || (() => {});
@@ -71,12 +73,19 @@ const Voice = (() => {
       }
     };
     rec.onend = () => {
-      if (active && !wantStop) { try { rec.start(); } catch (err) { active = false; onState('idle'); } }
-      else onState('idle');
+      if (active && !wantStop) {
+        const uptime = Date.now() - recStartTs;
+        if (uptime < 900) {
+          fastEnds++;
+          if (fastEnds >= 4) { active = false; onState('unsupported'); return; }
+        } else fastEnds = 0;
+        try { rec.start(); } catch (err) { active = false; onState('idle'); }
+      } else onState('idle');
     };
     active = true;
     onState('listening');
     try { rec.start(); } catch (e) { /* уже запущен */ }
+    recStartTs = Date.now();
     armIdle();
     clearTimeout(sessTimer);
     sessTimer = setTimeout(() => stop(), 30000);
@@ -125,7 +134,7 @@ const Voice = (() => {
           headers: { 'Authorization': `Bearer ${Storage.settings().aiKey}` },
           body: fd
         });
-        if (!res.ok) throw new Error('Voxtral ' + res.status);
+        if (!res.ok) { onState(res.status === 401 ? 'bad-key' : 'error'); return; }
         const j = await res.json();
         const text = (j.text || '').trim();
         onState('idle');

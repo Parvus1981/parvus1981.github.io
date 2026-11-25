@@ -147,7 +147,11 @@
       st => {
         btn.classList.toggle('listening', st === 'listening' || st === 'recording');
         if (st === 'listening') line.textContent = '🎙️ Слушаю… (тишина 4 сек — стоп)';
-        else if (st === 'recording') line.textContent = '🔴 Запись… нажмите кнопку снова для расшифровки';
+        else if (st === 'recording') line.textContent = '🔴 Запись… говорите, затем нажмите кнопку снова';
+        else if (st === 'transcribing') line.textContent = '🤖 Распознаю запись… подождите пару секунд';
+        else if (st === 'error') { btn.classList.remove('listening'); line.textContent = '⚠️ Не удалось расшифровать запись — попробуйте ещё раз'; toast('Ошибка распознавания'); }
+        else if (st === 'bad-key') { btn.classList.remove('listening'); line.textContent = '⚠️ AI-ключ неверный — проверьте его в «Ещё»'; }
+        else if (st === 'no-mic') { showVoiceHint('⚠️ Микрофон не найден. Проверьте разрешение на микрофон в настройках сайта (значок 🔒 слева от адреса).'); toast('Нет микрофона'); }
         else if (st === 'idle') {
           btn.classList.remove('listening');
           line.classList.remove('live');
@@ -304,7 +308,11 @@
       },
       st => {
         if (st === 'listening') { vs.hidden = false; vt.textContent = 'Говорите… формат: «товар цена». Например: «молоко полтора евро»'; }
-        else if (st === 'recording') { vs.hidden = false; vt.textContent = '🔴 Запись… нажмите ещё раз'; }
+        else if (st === 'recording') { vs.hidden = false; vt.textContent = '🔴 Запись… говорите, затем нажмите ещё раз'; }
+        else if (st === 'transcribing') { vs.hidden = false; vt.textContent = '🤖 Распознаю запись… подождите пару секунд'; }
+        else if (st === 'error') { vs.hidden = true; toast('Ошибка распознавания — попробуйте ещё раз'); }
+        else if (st === 'bad-key') { vs.hidden = true; toast('AI-ключ неверный — проверьте его в «Ещё»'); }
+        else if (st === 'no-mic') { vs.hidden = true; showVoiceHint('⚠️ Микрофон не найден — проверьте разрешения браузера.'); }
         else if (st === 'idle') {
           vs.hidden = true;
           vt.textContent = '';
