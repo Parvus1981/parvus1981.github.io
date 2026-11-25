@@ -835,6 +835,8 @@
     $('setAiKey').value = s.aiKey || '';
     const c = $('setCity');
     if (c) c.value = s.city || '';
+    const pv = $('setAiProvider');
+    if (pv) pv.value = s.aiProvider === 'gemini' ? 'gemini' : 'mistral';
   }
   $('btnSaveSettings').addEventListener('click', () => {
     Storage.updateSettings({
@@ -842,7 +844,8 @@
       voiceLang: $('setVoiceLang').value,
       ocrLang: $('setOcrLang').value,
       aiKey: $('setAiKey').value.trim(),
-      city: ($('setCity') ? $('setCity').value.trim() : '') || 'Rheine'
+      city: ($('setCity') ? $('setCity').value.trim() : '') || 'Mesum',
+      aiProvider: ($('setAiProvider') ? $('setAiProvider').value : 'mistral') || 'mistral'
     });
     renderMonthLabel();
     toast('Настройки сохранены ✓');

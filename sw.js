@@ -1,4 +1,4 @@
-const CACHE = 'family-budget-v2-14';
+const CACHE = 'family-budget-v2-15';
 const SHELL = [
   './', './index.html', './css/styles.css',
   './js/storage.js', './js/parser.js', './js/deals.js', './js/voice.js', './js/ai.js', './js/app.js',

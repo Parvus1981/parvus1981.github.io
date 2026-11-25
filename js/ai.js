@@ -1,19 +1,26 @@
 /* Интеграция с Mistral AI (api.mistral.ai) — ключ хранится только в браузере пользователя */
 const AI = (() => {
-  const BASE = 'https://api.mistral.ai/v1/chat/completions';
-  const MODEL = 'mistral-small-latest';
+  const PROVIDERS = {
+    mistral: { url: 'https://api.mistral.ai/v1/chat/completions', model: 'mistral-small-latest', label: 'Mistral' },
+    gemini:  { url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-2.5-flash', label: 'Google Gemini' }
+  };
 
   async function chat(messages, temp = 0.3) {
-    const key = Storage.settings().aiKey;
+    const st = Storage.settings();
+    const key = st.aiKey;
     if (!key) throw new Error('no-key');
-    const res = await fetch(BASE, {
+    const p = PROVIDERS[st.aiProvider === 'gemini' ? 'gemini' : 'mistral'];
+    const res = await fetch(p.url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-      body: JSON.stringify({ model: MODEL, temperature: temp, messages })
+      body: JSON.stringify({ model: p.model, temperature: temp, messages })
     });
     if (!res.ok) {
       const txt = await res.text();
-      throw new Error(`Mistral ${res.status}: ${txt.slice(0, 120)}`);
+      if (res.status === 402) {
+        throw new Error('У аккаунта Mistral не включён платёж за API (ошибка 402). Варианты: 1) включить биллинг в console.mistral.ai, 2) переключиться на бесплатный Google Gemini в «Ещё» → AI-ключ');
+      }
+      throw new Error(`${p.label} ${res.status}: ${txt.slice(0, 120)}`);
     }
     const json = await res.json();
     return json.choices[0].message.content;
@@ -22,7 +29,7 @@ const AI = (() => {
   function showErr(out, e) {
     out.classList.remove('thinking');
     out.textContent = e.message === 'no-key'
-      ? '⚠️ Добавьте бесплатный AI-ключ в разделе «Ещё» (console.mistral.ai) — и советы заработают.'
+      ? '⚠️ Добавьте AI-ключ в разделе «Ещё» — бесплатный есть в Google AI Studio (aistudio.google.com/apikey).'
       : `⚠️ ${e.message}`;
   }
 

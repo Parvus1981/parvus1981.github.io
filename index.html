@@ -231,9 +231,15 @@ Hackbraten — 3.99"></textarea>
     </div>
 
     <div class="card">
-      <h2>🤖 AI-ключ (Mistral)</h2>
-      <p class="hint">Бесплатный ключ: <a href="https://console.mistral.ai" target="_blank" rel="noopener">console.mistral.ai</a>. Нужен для резервного голоса, разбора чеков AI и советов. Ключ хранится только в вашем браузере.</p>
-      <input type="password" id="setAiKey" placeholder="API-ключ Mistral" autocomplete="off">
+      <h2>🤖 AI-ключ</h2>
+      <p class="hint">Провайдер на выбор — ключ хранится только в вашем браузере.</p>
+      <select id="setAiProvider" style="width:100%;margin-bottom:8px">
+        <option value="mistral">Mistral (нужен платёж за API)</option>
+        <option value="gemini">Google Gemini — бесплатный тариф, без карты</option>
+      </select>
+      <input type="password" id="setAiKey" placeholder="API-ключ (зависит от провайдера)" autocomplete="off">
+      <p class="hint">✨ Бесплатный вариант: выберите Google Gemini, получите ключ без карты: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> → «Create API key» → вставьте сюда.
+      Mistral: <a href="https://console.mistral.ai" target="_blank" rel="noopener">console.mistral.ai</a> — у него API требует включённого биллинга (иначе ошибка 402).</p>
       <label class="hint" style="display:block;margin-top:8px">Город (для чего отправляем название в шапке)</label>
       <input type="text" id="setCity" placeholder="Mesum / Rheine…">
       <p class="hint">🚗 Расстояния до магазинов — только ты знаешь реальные. Впиши в списке магазинов ниже (например, по Google Maps) — и они появятся у цен. Пусто = не показывать.</p>

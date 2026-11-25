@@ -21,6 +21,7 @@ const Storage = (() => {
         voiceLang: 'ru-RU',
         ocrLang: 'deu+rus+eng',
         aiKey: '',
+        aiProvider: 'mistral',
         stores: DEFAULT_STORES,
         zip: '48432',
         city: 'Mesum'
@@ -57,6 +58,11 @@ const Storage = (() => {
       const OLD_DEFAULT_KEYS = ['klaas-kock','lidl','netto-marken-discount','rewe','combi','kaufland','penny','getraenke-hoffmann','edeka','aldi-nord','dm-drogerie-markt','rossmann'].sort().join(',');
       const curKeys = merged.settings.stores.map(s => s.key || '').sort().join(',');
       if (curKeys === OLD_DEFAULT_KEYS) merged.settings.stores = base.settings.stores.map(s => ({ ...s }));
+      // старые значения по умолчанию (Rheine/48431) → Мезум/48432
+      if (merged.settings.zip === '48431' && merged.settings.city === 'Rheine') {
+        merged.settings.zip = '48432';
+        merged.settings.city = 'Mesum';
+      }
       return merged;
     } catch (e) {
       console.error('load error', e);
