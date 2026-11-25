@@ -166,12 +166,12 @@
   });
 
   /* ============ Сравнение цен ============ */
-  // Ссылка на оффер: deep-link продавца, иначе страница магазина на Marktguru (всегда открывается)
+  // Ссылка на оффер: deep-link сети -> собственная страница акций сети -> Marktguru
   function offerHref(o) {
     if (o.e) return o.e;
     const key = o.s && o.s[0] && o.s[0].u;
     const st = key && Storage.storeByKey(key);
-    if (st && st.key) return 'https://www.marktguru.de/r/' + st.key;
+    if (st && st.url) return st.url;
     return key ? 'https://www.marktguru.de/r/' + key : 'https://www.marktguru.de/';
   }
 
@@ -239,14 +239,16 @@
       const bestKey = ranked[0] && ranked[0].key;
       totHtml = '<div class="card-head" style="margin-top:14px"><h2>Во сколько обойдётся корзина</h2></div>';
       totals.slice(0, 6).forEach(t => {
-        totHtml += `<div class="store-tot ${t.key === bestKey ? 'best' : ''}">
-          <div><span class="st-name">${esc(t.store)}</span>${t.dist != null ? `<span class="st-dist">${t.dist} км от вас</span>` : ''}</div>
+        const stDef = Storage.storeByKey(t.key);
+        const href = esc(stDef && stDef.url ? stDef.url : (t.key ? 'https://www.marktguru.de/r/' + t.key : 'https://www.marktguru.de/'));
+        totHtml += `<a class="store-tot ${t.key === bestKey ? 'best' : ''}" href="${href}" target="_blank" rel="noopener">
+          <div><span class="st-name">${esc(t.store)}</span>${t.dist != null ? `<span class="st-dist">${t.dist} км ↗</span>` : ''}</div>
           <div style="text-align:right"><span class="st-sum">${fmt(t.sum)}</span>
           <span class="st-sub">${t.covers}/${activeCount} товаров</span></div>
-        </div>`;
+        </a>`;
       });
       if (ranked[0]) {
-        totHtml += `<div class="cmp-found" style="margin-top:10px">💡 Выгоднее всего сегодня: <b>${esc(ranked[0].store)}</b>${ranked[0].dist != null ? ` (${ranked[0].dist} км)` : ''} — ${fmt(ranked[0].sum)} за ${ranked[0].covers} из ${activeCount} позиций.</div>`;
+        totHtml += `<div class="cmp-found" style="margin-top:10px">💡 Цены — из реальных буклетов сетей на сегодня. Выгоднее всего: <b>${esc(ranked[0].store)}</b>${ranked[0].dist != null ? ` (${ranked[0].dist} км)` : ''} — ${fmt(ranked[0].sum)} за ${ranked[0].covers} из ${activeCount} позиций.</div>`;
       }
       totHtml += `<div class="cmp-actions">
         <button id="btnToBudget" class="btn primary">✔️ Куплено — внести в бюджет</button>

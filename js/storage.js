@@ -3,17 +3,17 @@ const Storage = (() => {
   const KEY = 'family-budget-v2';
   const DEFAULT_STORES = [
     { name: 'K+K Klaas & Kock', url: 'https://www.klaas-und-kock.de/', color: '#c8102e', dist: 1.0, key: 'klaas-kock' },
-    { name: 'Lidl', url: 'https://www.marktguru.de/r/lidl', color: '#0050aa', dist: 1.0, key: 'lidl' },
-    { name: 'Netto Marken-Discount', url: 'https://www.marktguru.de/r/netto-marken-discount', color: '#ffcc00', dist: 1.5, key: 'netto-marken-discount' },
-    { name: 'REWE', url: 'https://www.marktguru.de/r/rewe', color: '#cc071e', dist: 1.2, key: 'rewe' },
-    { name: 'Combi', url: 'https://www.marktguru.de/r/combi', color: '#e30613', dist: 1.6, key: 'combi' },
-    { name: 'Kaufland', url: 'https://www.marktguru.de/r/kaufland', color: '#e10914', dist: 3.0, key: 'kaufland' },
-    { name: 'PENNY', url: 'https://www.marktguru.de/r/penny', color: '#d81e05', dist: 2.0, key: 'penny' },
-    { name: 'Getränke Hoffmann', url: 'https://www.marktguru.de/r/getraenke-hoffmann', color: '#0e2c66', dist: 2.2, key: 'getraenke-hoffmann' },
-    { name: 'EDEKA', url: 'https://www.marktguru.de/r/edeka', color: '#001e50', dist: 2.5, key: 'edeka' },
-    { name: 'ALDI', url: 'https://www.marktguru.de/r/aldi-nord', color: '#0a2896', dist: 2.4, key: 'aldi' },
-    { name: 'dm', url: 'https://www.marktguru.de/r/dm-drogerie-markt', color: '#002878', dist: 1.8, key: 'dm' },
-    { name: 'Rossmann', url: 'https://www.marktguru.de/r/rossmann', color: '#c3002d', dist: 1.8, key: 'rossmann' }
+    { name: 'Lidl', url: 'https://www.lidl.de/l/aktuelle-prospekte', color: '#0050aa', dist: 1.0, key: 'lidl' },
+    { name: 'Netto Marken-Discount', url: 'https://www.netto-online.de/ueber-netto/Online-Prospekte.chtm', color: '#ffcc00', dist: 1.5, key: 'netto-marken-discount' },
+    { name: 'REWE', url: 'https://www.rewe.de/angebote/', color: '#cc071e', dist: 1.2, key: 'rewe' },
+    { name: 'Combi', url: 'https://www.combi.de/angebote', color: '#e30613', dist: 1.6, key: 'combi' },
+    { name: 'Kaufland', url: 'https://filiale.kaufland.de/angebote/uebersicht.html', color: '#e10914', dist: 3.0, key: 'kaufland' },
+    { name: 'PENNY', url: 'https://www.penny.de/', color: '#d81e05', dist: 2.0, key: 'penny' },
+    { name: 'Getränke Hoffmann', url: 'https://www.getraenke-hoffmann.de/', color: '#0e2c66', dist: 2.2, key: 'getraenke-hoffmann' },
+    { name: 'EDEKA', url: 'https://www.edeka.de/', color: '#001e50', dist: 2.5, key: 'edeka' },
+    { name: 'ALDI Nord', url: 'https://www.aldi-nord.de/angebote.html', color: '#0a2896', dist: 2.4, key: 'aldi-nord' },
+    { name: 'dm', url: 'https://www.dm.de/aktuelle-prospekte/', color: '#002878', dist: 1.8, key: 'dm-drogerie-markt' },
+    { name: 'Rossmann', url: 'https://www.rossmann.de/de/aktuelle-handzettel', color: '#c3002d', dist: 1.8, key: 'rossmann' }
   ];
 
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -50,7 +50,9 @@ const Storage = (() => {
       if (!Array.isArray(merged.settings.stores) || !merged.settings.stores.length) {
         merged.settings.stores = base.settings.stores;
       }
+      const aliases = { aldi: 'aldi-nord', dm: 'dm-drogerie-markt' };
       merged.settings.stores = merged.settings.stores.map(s => {
+        if (s.key && aliases[s.key]) s = { ...s, key: aliases[s.key], name: aliases[s.key] === 'aldi-nord' ? 'ALDI Nord' : 'dm' };
         const def = s.key && base.settings.stores.find(d => d.key === s.key);
         return def ? { ...def, dist: s.dist != null ? s.dist : def.dist } : s;
       });
