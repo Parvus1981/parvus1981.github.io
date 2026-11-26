@@ -15,7 +15,8 @@ const AI = (() => {
       if (res.ok) {
         const j = await res.json();
         const ids = (j.data || []).map(m => (m.id || '').replace(/^models\//, ''))
-          .filter(id => /^gemini/i.test(id) && /flash/i.test(id) && !/(tts|image|audio|live|embedding|native)/i.test(id));
+          .filter(id => /^gemini/i.test(id) && /flash/i.test(id) && !/(tts|image|audio|live|embedding|native|thinking|pro)/i.test(id))
+          .sort((a, b) => (/lite/i.test(a) ? 0 : 1) - (/lite/i.test(b) ? 0 : 1) || a.length - b.length);
         if (ids.length) {
           Storage.updateSettings({ geminiModel: ids[0] });
           return ids[0];
@@ -33,29 +34,43 @@ const AI = (() => {
     let model = p.model;
     if (p === PROVIDERS.gemini) model = await pickGeminiModel(key);
 
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const res = await fetch(p.url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-        body: JSON.stringify({ model, temperature: temp, messages })
-      });
-      if (res.ok) {
-        const json = await res.json();
-        return json.choices[0].message.content;
+    // кандидаты: выбранная модель + резервные
+    const seen = new Set([model, ...GEMINI_FALLBACKS]);
+    const candidates = [model, ...GEMINI_FALLBACKS].filter(Boolean);
+    let lastErr = '';
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        await new Promise(r => setTimeout(r, attempt ? 1500 : 0)); // пауза перед повтором
+        const res = await fetch(p.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+          body: JSON.stringify({ model, temperature: temp, messages })
+        });
+        if (res.ok) {
+          const json = await res.json();
+          return json.choices[0].message.content;
+        }
+        const txt = await res.text();
+        lastErr = `${res.status}: ${txt.slice(0, 120)}`;
+        if (res.status === 402) {
+          throw new Error('У аккаунта Mistral не включён платёж за API (ошибка 402). Варианты: 1) включить биллинг в console.mistral.ai, 2) переключиться на бесплатный Google Gemini в «Ещё» → AI-ключ');
+        }
+        // 401/403 — нет смысла перебирать модели
+        if (res.status === 401 || res.status === 403) throw new Error(`${p.label} ${lastErr}`);
+        const transient = res.status === 500 || res.status === 503 || res.status === 429;
+        const notFound = res.status === 404 || /not found|not available/i.test(txt);
+        if (transient || notFound) {
+          if (notFound) Storage.updateSettings({ geminiModel: '' });
+          const nextModel = candidates.find(c => c !== model);
+          if (attempt < 3 && nextModel) { model = nextModel; continue; }
+          if (attempt < 3) continue; // та же модель, но после паузы
+        }
+        throw new Error(`${p.label} ${lastErr}`);
+      } catch (e) {
+        if (attempt === 3 || e.message.includes('402') || e.message.includes('401') || e.message.includes('403')) throw e;
       }
-      const txt = await res.text();
-      if (res.status === 402) {
-        throw new Error('У аккаунта Mistral не включён платёж за API (ошибка 402). Варианты: 1) включить биллинг в console.mistral.ai, 2) переключиться на бесплатный Google Gemini в «Ещё» → AI-ключ');
-      }
-      // Gemini: модель недоступна для этого ключа → сброс и перебор
-      if (p === PROVIDERS.gemini && (res.status === 404 || /not found|not available/i.test(txt))) {
-        Storage.updateSettings({ geminiModel: '' });
-        model = GEMINI_FALLBACKS[attempt] || null;
-        if (model) continue;
-      }
-      throw new Error(`${p.label} ${res.status}: ${txt.slice(0, 120)}`);
     }
-    throw new Error(p.label + ': не нашлась доступная модель для этого ключа — проверьте ключ на aistudio.google.com/apikey');
+    throw new Error(`${p.label}: модель перегружена или недоступна (${lastErr.slice(0, 80)}) — попробуйте ещё раз через минуту`);
   }
 
   function showErr(out, e) {
