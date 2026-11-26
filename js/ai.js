@@ -5,25 +5,57 @@ const AI = (() => {
     gemini:  { url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-2.5-flash', label: 'Google Gemini' }
   };
 
+  /* Google часто меняет модели: спрашиваем у API список доступных и запоминаем рабочую */
+  const GEMINI_FALLBACKS = ['gemini-flash-latest', 'gemini-2.0-flash'];
+  async function pickGeminiModel(key) {
+    const saved = Storage.settings().geminiModel;
+    if (saved) return saved;
+    try {
+      const res = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/models', { headers: { Authorization: `Bearer ${key}` } });
+      if (res.ok) {
+        const j = await res.json();
+        const ids = (j.data || []).map(m => (m.id || '').replace(/^models\//, ''))
+          .filter(id => /^gemini/i.test(id) && /flash/i.test(id) && !/(tts|image|audio|live|embedding|native)/i.test(id));
+        if (ids.length) {
+          Storage.updateSettings({ geminiModel: ids[0] });
+          return ids[0];
+        }
+      }
+    } catch (e) { /* сеть — упадём в fallback ниже */ }
+    return GEMINI_FALLBACKS[0];
+  }
+
   async function chat(messages, temp = 0.3) {
     const st = Storage.settings();
     const key = st.aiKey;
     if (!key) throw new Error('no-key');
     const p = PROVIDERS[st.aiProvider === 'gemini' ? 'gemini' : 'mistral'];
-    const res = await fetch(p.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-      body: JSON.stringify({ model: p.model, temperature: temp, messages })
-    });
-    if (!res.ok) {
+    let model = p.model;
+    if (p === PROVIDERS.gemini) model = await pickGeminiModel(key);
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const res = await fetch(p.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({ model, temperature: temp, messages })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        return json.choices[0].message.content;
+      }
       const txt = await res.text();
       if (res.status === 402) {
         throw new Error('У аккаунта Mistral не включён платёж за API (ошибка 402). Варианты: 1) включить биллинг в console.mistral.ai, 2) переключиться на бесплатный Google Gemini в «Ещё» → AI-ключ');
       }
+      // Gemini: модель недоступна для этого ключа → сброс и перебор
+      if (p === PROVIDERS.gemini && (res.status === 404 || /not found|not available/i.test(txt))) {
+        Storage.updateSettings({ geminiModel: '' });
+        model = GEMINI_FALLBACKS[attempt] || null;
+        if (model) continue;
+      }
       throw new Error(`${p.label} ${res.status}: ${txt.slice(0, 120)}`);
     }
-    const json = await res.json();
-    return json.choices[0].message.content;
+    throw new Error(p.label + ': не нашлась доступная модель для этого ключа — проверьте ключ на aistudio.google.com/apikey');
   }
 
   function showErr(out, e) {
