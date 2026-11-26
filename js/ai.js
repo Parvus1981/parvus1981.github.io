@@ -18,7 +18,7 @@ const AI = (() => {
           .filter(id => /^gemini/i.test(id) && /flash/i.test(id) && !/(tts|image|audio|live|embedding|native|thinking|pro)/i.test(id))
           .sort((a, b) => (/lite/i.test(a) ? 0 : 1) - (/lite/i.test(b) ? 0 : 1) || a.length - b.length);
         if (ids.length) {
-          Storage.updateSettings({ geminiModel: ids[0] });
+          Storage.updateSettings({ geminiModel: ids[0], geminiPool: ids });
           return ids[0];
         }
       }
@@ -35,12 +35,14 @@ const AI = (() => {
     if (p === PROVIDERS.gemini) model = await pickGeminiModel(key);
 
     // кандидаты: выбранная модель + резервные
-    const seen = new Set([model, ...GEMINI_FALLBACKS]);
-    const candidates = [model, ...GEMINI_FALLBACKS].filter(Boolean);
+    // пул: сохранённая модель + резервы + все остальные модели ключа (lite в приоритете)
+    const pool = (st.geminiPool || []).filter(m => m && m !== model && !GEMINI_FALLBACKS.includes(m));
+    const candidates = [model, ...GEMINI_FALLBACKS, ...pool.slice(0, 4)]
+      .filter((v, i, a) => v && a.indexOf(v) === i);
     let lastErr = '';
-    for (let attempt = 0; attempt < 4; attempt++) {
+    for (let attempt = 0; attempt < 5; attempt++) {
       try {
-        await new Promise(r => setTimeout(r, attempt ? 1500 : 0)); // пауза перед повтором
+        await new Promise(r => setTimeout(r, attempt ? 2000 : 0)); // пауза перед повтором
         const res = await fetch(p.url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
@@ -61,13 +63,17 @@ const AI = (() => {
         const notFound = res.status === 404 || /not found|not available/i.test(txt);
         if (transient || notFound) {
           if (notFound) Storage.updateSettings({ geminiModel: '' });
-          const nextModel = candidates.find(c => c !== model);
-          if (attempt < 3 && nextModel) { model = nextModel; continue; }
-          if (attempt < 3) continue; // та же модель, но после паузы
+          if (attempt < 4) {
+            const nextModel = candidates.find(c => c !== model);
+            if (nextModel) model = nextModel; // пробуем другую модель
+            continue;
+          }
+          break; // все попытки исчерпаны — читаемое сообщение после цикла
         }
         throw new Error(`${p.label} ${lastErr}`);
       } catch (e) {
-        if (attempt === 3 || e.message.includes('402') || e.message.includes('401') || e.message.includes('403')) throw e;
+        if (e.message.includes('402') || e.message.includes('401') || e.message.includes('403')) throw e;
+        if (attempt === 4) throw e;
       }
     }
     throw new Error(`${p.label}: модель перегружена или недоступна (${lastErr.slice(0, 80)}) — попробуйте ещё раз через минуту`);
